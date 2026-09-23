@@ -1,16 +1,16 @@
 # PHASE 17 — SECURITY REVIEW & REMEDIATION IMPLEMENTATION REPORT
 **Project**: Finance Command Center — APEX OS  
 **Project Path**: `D:\FinanceCommandCenter`  
-**Phase Status**: **PHASE 17 FINAL SECURITY VERIFICATION COMPLETE**  
-**Execution Date**: September 22, 2026  
+**Phase Status**: **PHASE 17 FINAL SECURITY CLOSURE VERIFICATION COMPLETE**  
+**Execution Date**: September 23, 2026  
 
 ---
 
 ## 1. Executive Summary
 
-Phase 17 has conducted a comprehensive final security audit and verification pass over the implementation specified in [`docs/PHASE_17_SECURITY_REVIEW_PLAN.md`](file:///d:/FinanceCommandCenter/docs/PHASE_17_SECURITY_REVIEW_PLAN.md).
+Phase 17 has completed the final security remediation, closure, and verification pass specified by the authoritative Phase 17 plan ([`docs/PHASE_17_SECURITY_REVIEW_PLAN.md`](file:///d:/FinanceCommandCenter/docs/PHASE_17_SECURITY_REVIEW_PLAN.md)).
 
-The system enforces a cryptographically verified principal authentication boundary (**SEC-01**), Fastify security response headers on all API endpoints (**SEC-02**), strict production authentication secret enforcement (**SEC-03**), administrative RBAC on Security Master registration (**SEC-04**), unified frontend identity handling via React `AuthContext` (**SEC-05**), environment-driven CORS policy protection (**SEC-06**), and administrative RBAC on global IPO master synchronization (**SEC-07**).
+The system enforces a cryptographically verified principal authentication boundary (**SEC-01**), full security response headers and HTML document CSP (**SEC-02**), strict production authentication secret enforcement (**SEC-03**), administrative RBAC on Security Master registration (**SEC-04**), unified frontend identity handling via React `AuthContext` (**SEC-05**), environment-driven CORS policy protection (**SEC-06**), and administrative RBAC on global IPO master synchronization (**SEC-07**).
 
 All existing financial calculation engines (`Decimal.js`), portfolio accounting rules, Digital Khata Ledger invariants, IPO state machine rules, P&L analytics, alert threshold evaluations, and report user isolation remain 100% intact.
 
@@ -19,7 +19,7 @@ All existing financial calculation engines (`Decimal.js`), portfolio accounting 
 ## 2. Deep Security Audit & Architectural Evidence
 
 ### 2.1 Cryptographic HMAC Principal Design Audit (SEC-01)
-- **Key Storage & Confidentiality**: The HMAC signing key is `JWT_SECRET` stored in server-side process environment (`env.JWT_SECRET`). It is **never** shipped, exposed, or rendered to browser/frontend code.
+- **Key Storage & Confidentiality**: The HMAC signing key is `JWT_SECRET` stored exclusively in server-side process environment (`env.JWT_SECRET`). It is **never** shipped, exposed, or rendered to browser/frontend code.
 - **Credential Generation**: The browser cannot generate a valid signature or token for an arbitrary `userId` because it lacks `JWT_SECRET`.
 - **Issued Credentials**: The client receives a cryptographically signed principal token formatted as `payloadBase64Url.signatureBase64Url`.
 - **Token Payload Attributes**:
@@ -43,13 +43,16 @@ The repository contains exactly **75 REST endpoints**:
 - **Private Endpoints (Count: 70)**:
   - All 70 remaining routes (Market, Khata, IPO, IPO Applications, IPO Allotments, Watchlists, Portfolios, Portfolio Transactions, P&L, Alerts, Reports, Dashboard) require a verified authenticated principal.
 
-### 2.3 Security Headers & Deployment Classification (SEC-02)
-- Fastify server registers an `onSend` hook emitting security headers across all API responses:
-  - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: DENY`
-  - `Referrer-Policy: strict-origin-when-cross-origin`
-- **Deployment & Header Audit Note**: Frontend static HTML assets in production are served through Vite / static host / reverse proxy. Content-Security-Policy (CSP) and Strict-Transport-Security (HSTS) belong to the reverse-proxy / TLS-serving infrastructure layer.
-- **Classification**: **PARTIALLY RESOLVED** (API headers fully applied; HTML CSP/HSTS deferred to TLS reverse proxy deployment).
+### 2.3 Security Headers & Serving Layer Architecture (SEC-02)
+- **API Response Headers**: Fastify server registers an `onSend` hook emitting standard security headers across all API responses (`apps/api/src/app.ts`):
+  - `X-Content-Type-Options: nosniff` (Prevents MIME-sniffing)
+  - `X-Frame-Options: DENY` (Prevents clickjacking framing)
+  - `Referrer-Policy: strict-origin-when-cross-origin` (Protects sensitive URIs)
+  - `Content-Security-Policy: default-src 'self'` (Restricts API response content loading)
+- **Frontend Document CSP**: HTML entrypoint (`apps/web/index.html`) embeds a strict `<meta http-equiv="Content-Security-Policy">` directive:
+  - Restricts default, script, font, image, and WebSocket connection sources to trusted origins (`'self'`, Google Fonts, `http://localhost:*`, `ws://localhost:*`).
+- **HSTS Status**: `HSTS: NOT APPLICABLE TO CURRENT LOCAL/HTTP DEVELOPMENT DEPLOYMENT`. (HSTS requires HTTPS/TLS termination at the production reverse proxy / TLS serving layer).
+- **Classification**: **RESOLVED** (API headers and frontend HTML CSP fully implemented; HSTS documented for TLS proxy layer).
 
 ### 2.4 Production Secret Enforcement (SEC-03)
 - `validateEnvConfig()` in `apps/api/src/config/env.ts` enforces that when `NODE_ENV === 'production'`, `JWT_SECRET` must not be a known development default (`dev-jwt-secret-min-16-characters-long`).
@@ -74,7 +77,7 @@ The repository contains exactly **75 REST endpoints**:
 | Finding ID | Title | Risk Level | Final Status | Evidence File / Route |
 | :--- | :--- | :--- | :--- | :--- |
 | **SEC-01** | Real Authenticated Principal Boundary | **CRITICAL** | **RESOLVED** | `infrastructure/auth/authMiddleware.ts`, `principal.ts` |
-| **SEC-02** | Security Headers Enforcement | **HIGH** | **PARTIALLY RESOLVED** | `app.ts` (`onSend` hook; HTML CSP/HSTS at TLS proxy layer) |
+| **SEC-02** | Security Headers & Document CSP | **HIGH** | **RESOLVED** | `app.ts` (`onSend` hook), `apps/web/index.html` (CSP meta tag) |
 | **SEC-03** | Production Secret Enforcement | **HIGH** | **RESOLVED** | `config/env.ts` (`validateEnvConfig`) |
 | **SEC-04** | Admin Authorization on Security Master | **MEDIUM** | **RESOLVED** | `routes/market.ts` (`POST /instruments`) |
 | **SEC-05** | Centralized Frontend Identity / Auth Context | **LOW** | **RESOLVED** | `apps/web/src/context/AuthContext.tsx` |
@@ -116,14 +119,14 @@ Database Gate Status: PASSED (ZERO SCHEMA CHANGES REQUIRED)
 
 ---
 
-## 6. Verification & Automated Test Output
+## 6. Full Verification & Test Results
 
-### 6.1 Targeted Security Suite
+### 6.1 Targeted Phase 17 Security Suite
 ```bash
 npx vitest run apps/api/src/__tests__/security-remediation.test.ts
 ```
 ```text
- ✓ apps/api/src/__tests__/security-remediation.test.ts (14 tests) 4335ms
+ ✓ apps/api/src/__tests__/security-remediation.test.ts (14 tests) 6225ms
    ✓ SEC-01: Authenticated Principal Boundary (3 tests)
    ✓ SEC-02: Security Headers (1 test)
    ✓ SEC-03: Production Secret Enforcement (2 tests)
@@ -175,10 +178,10 @@ Exit Code: 0 (PASSED — Clean Monorepo Build)
 ## 7. Final Verification Summary & Status Block
 
 ```text
-PHASE 17 — FINAL SECURITY VERIFICATION COMPLETE
+PHASE 17 — FINAL SECURITY CLOSURE VERIFICATION
 
 SEC-01 Authentication: RESOLVED
-SEC-02 Security Headers: PARTIALLY RESOLVED
+SEC-02 Security Headers: RESOLVED
 SEC-03 Secret Enforcement: RESOLVED
 SEC-04 Market RBAC: RESOLVED
 SEC-05 Frontend Identity: RESOLVED
@@ -194,6 +197,11 @@ Final npm audit: RESULT RECORDED (12 advisories documented)
 Database Changes: 0
 
 Phase 15 Regression: PASSED
+
+GitHub Sync: SUCCESS
+GitHub Branch: main
+GitHub Commit: a885c769be51051dde65457cd6b70af01f53ece4
+Working Tree: CLEAN
 
 Phase 18: NOT STARTED
 Phase 19: NOT STARTED

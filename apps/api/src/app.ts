@@ -36,6 +36,7 @@ export function buildApp(): FastifyInstance {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('Content-Security-Policy', "default-src 'self'");
   });
 
   app.register(rateLimit, {
