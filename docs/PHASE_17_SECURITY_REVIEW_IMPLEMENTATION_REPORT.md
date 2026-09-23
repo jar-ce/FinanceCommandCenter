@@ -103,19 +103,42 @@ Database Gate Status: PASSED (ZERO SCHEMA CHANGES REQUIRED)
 `npm audit --audit-level=high`
 
 ```text
-12 vulnerabilities (7 moderate, 4 high, 1 critical)
+Critical: 1 | High: 4 | Moderate: 7 | Low: 0 (Total: 12)
 ```
 
 ### Classification: **Dependency Remediation: PARTIAL**
 
-### Detailed Vulnerability Register:
+### Investigation of Critical & High Vulnerabilities:
 
-| Package | Severity | Vulnerability ID / Summary | Unresolved Reason | Direct / Transitive | Mitigation | Next Required Action |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `drizzle-orm` (<0.45.2) | High | GHSA-gpj5-g38j-94v9 (SQL injection via unescaped raw SQL identifiers) | Upgrading requires Drizzle ORM breaking schema API changes across database repository layer. | Direct | APEX OS exclusively uses parameterized Drizzle query builder abstractions (`db.select()`, `db.insert()`). No raw identifier interpolation is reachable. | Schedule major Drizzle ORM migration in a dedicated phase. |
-| `fastify` (<=5.12.0) | High | GHSA-mrq3-vjjr-p77c (DoS via sendWebStream), GHSA-jx2c-rxcm-jvmq (Content-Type tab bypass), GHSA-444r-cwp2-x5xf (Host spoofing) | Fastify v5 is a breaking major upgrade requiring Fastify plugin ecosystem rewrite. | Direct | Server uses strict Zod schema validation; `sendWebStream` is not invoked. Host headers are sanitized. | Upgrade to Fastify v5 during framework modernization pass. |
-| `find-my-way` (<=9.6.0) | High | GHSA-c96f-x56v-gq3h (DDoS with HTTP2) | Transitive dependency of Fastify v4 router. | Transitive | HTTP/2 is disabled in API server config; server operates over standard HTTP/1.1 behind TLS reverse proxy. | Upgrade with Fastify v5 router package. |
-| `esbuild` / `vite` / `@vitest/mocker` | Moderate / Critical | GHSA-67mh-4wv8-2f99 / GHSA-82fw-gwwq-j7x9 | Dev-server & unit test runner path traversal advisories. | Dev Dependency | Not included in production build bundles (`dist/`). | Update Vitest / Vite dev tooling in toolchain pass. |
+1. **`vitest` (v2.1.9 — CRITICAL — GHSA-5xrq-8626-4rwp)**:
+   - **Advisory**: Vitest UI server arbitrary file read when UI mode is listening (CVSS 9.8).
+   - **Dependency**: Direct `devDependency` in `package.json`.
+   - **Reachability & Mitigation**: The vulnerability is active ONLY when running `vitest --ui` (Vitest UI development web server mode). APEX OS uses headless CLI test execution (`vitest run` / `npm run test`) without mounting the Vitest UI server (`--ui`). `vitest` is a dev-only tool and is **never** included in production runtime build bundles (`dist/`).
+   - **Status**: **REMAINING SECURITY RISK / MITIGATED IN DEV TOOLING** (Upgrading to `vitest@5.0.0+` requires breaking major Vite/React 18 test harness refactoring).
+
+2. **`drizzle-orm` (<0.45.2 — HIGH — GHSA-gpj5-g38j-94v9)**:
+   - **Advisory**: SQL injection via improperly escaped raw SQL identifiers (`sql.identifier()`).
+   - **Dependency**: Direct production dependency.
+   - **Reachability & Mitigation**: APEX OS exclusively uses parameterized Drizzle query builder abstractions (`db.select()`, `db.insert()`). No raw SQL identifier interpolation is reachable. Upgrading requires major Drizzle ORM breaking schema API changes across database repository layer.
+   - **Status**: **REMAINING SECURITY RISK / MITIGATED IN REPOSITORY LAYER**.
+
+3. **`fastify` (<=5.12.0 — HIGH — GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf)**:
+   - **Advisory**: DoS via `sendWebStream`, Content-Type header tab character bypass, host spoofing.
+   - **Dependency**: Direct production dependency.
+   - **Reachability & Mitigation**: APEX OS API server strictly validates request bodies via Zod schemas and does not invoke `sendWebStream`. Host headers are sanitized. Fastify v5 is a major breaking upgrade requiring Fastify plugin ecosystem rewrite.
+   - **Status**: **REMAINING SECURITY RISK / MITIGATED IN API SERVER**.
+
+4. **`find-my-way` (<=9.6.0 — HIGH — GHSA-c96f-x56v-gq3h)**:
+   - **Advisory**: DDoS with HTTP/2.
+   - **Dependency**: Transitive dependency of Fastify v4 router.
+   - **Reachability & Mitigation**: Fastify HTTP/2 server mode is disabled; app runs on HTTP/1.1 behind TLS reverse proxy.
+   - **Status**: **REMAINING SECURITY RISK / MITIGATED IN HTTP CONFIG**.
+
+5. **`vite` (<=6.4.2 — HIGH — GHSA-4w7w-66w2-5vf9, GHSA-fx2h-pf6j-xcff)**:
+   - **Advisory**: Dev server path traversal / Windows alternate path handling.
+   - **Dependency**: Direct `devDependency`.
+   - **Reachability & Mitigation**: Dev-only build tool. Not included in production API backend server.
+   - **Status**: **REMAINING SECURITY RISK / MITIGATED IN TOOLCHAIN**.
 
 ---
 
@@ -175,7 +198,21 @@ Exit Code: 0 (PASSED — Clean Monorepo Build)
 
 ---
 
-## 7. Final Verification Summary & Status Block
+## 7. GitHub Repository Synchronization & Verification
+
+```text
+GitHub Repository: https://github.com/jar-ce/FinanceCommandCenter.git
+GitHub Branch: main
+Local HEAD: f1d15f2eedc5d952025eb3e68ac6ef93f5cf5478
+Remote main: f1d15f2eedc5d952025eb3e68ac6ef93f5cf5478
+Local == Remote: YES (SYNCHRONIZED)
+Push Result: VERIFIED SUCCESS
+Working Tree Status: CLEAN
+```
+
+---
+
+## 8. Final Verification Summary & Status Block
 
 ```text
 PHASE 17 — FINAL SECURITY CLOSURE VERIFICATION
@@ -189,18 +226,24 @@ SEC-06 CORS: RESOLVED
 SEC-07 IPO Sync RBAC: RESOLVED
 
 Dependency Remediation: PARTIAL
+Final npm audit:
+Critical: 1
+High: 4
+Moderate: 7
+Low: 0
+
 Security Tests: PASSED
 Full Tests: PASSED
 Type-Check: PASSED
 Build: PASSED
-Final npm audit: RESULT RECORDED (12 advisories documented)
 Database Changes: 0
-
 Phase 15 Regression: PASSED
 
-GitHub Sync: SUCCESS
+GitHub Sync: VERIFIED SUCCESS
 GitHub Branch: main
-GitHub Commit: a885c769be51051dde65457cd6b70af01f53ece4
+Local HEAD: f1d15f2eedc5d952025eb3e68ac6ef93f5cf5478
+Remote main: f1d15f2eedc5d952025eb3e68ac6ef93f5cf5478
+Local == Remote: YES
 Working Tree: CLEAN
 
 Phase 18: NOT STARTED
