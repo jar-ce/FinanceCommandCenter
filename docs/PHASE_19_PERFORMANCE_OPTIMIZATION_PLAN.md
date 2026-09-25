@@ -11,33 +11,35 @@
 
 ## 1. Executive Summary
 
-Phase 19 provides the authoritative, evidence-based performance optimization plan for the Finance Command Center (APEX OS). Following the successful verification of Phase 18 (34 test files, 282 tests, 0 failures, clean build, clean type-check), this plan establishes concrete, empirical targets to eliminate measurable performance bottlenecks across backend API routing, database access patterns, financial aggregation loops, market data caching, and frontend rendering.
+Phase 19 provides the authoritative, evidence-based performance optimization plan for the Finance Command Center (APEX OS). Following the successful verification of Phase 18 (34 test files, 282 tests, 0 failures, clean build, clean type-check), this plan establishes concrete targets to eliminate measurable performance bottlenecks across backend API routing, database access patterns, financial aggregation loops, market data caching, and frontend rendering.
 
 ### Primary Directives & Constraints:
 * **Zero Semantic / Financial Alterations**: Decimal.js arithmetic precision, NUMERIC(18, 4) database storage, chronological P&L FIFO accounting, Simple Return (`Period Realized P&L / Net Capital Invested`), XIRR/CAGR qualification rules, and valuation coverage calculation rules remain untouched. Floating-point substitutions are strictly prohibited.
 * **Security & Multi-Tenant Boundary Enforcement**: SEC-01 through SEC-07 security controls, caller identity verification, RBAC permissions, and strict User A / User B isolation must remain intact. Caching must never leak tenant data across user boundaries.
 * **Database Gate**: Tables Added: 0, Migrations Added: 0, Schema Modifications: 0. Potential index optimizations are documented as future implementation candidates only and will not modify production schema during planning.
-* **Evidence-Based Optimizations**: Every proposed optimization is grounded in verified code paths, avoiding speculative or generic refactorings.
+* **Evidence-Based Terminology**: Optimizations distinguish empirical baseline measurements from performance hypotheses and targets to be validated via pre/post implementation benchmarks.
 
 ---
 
 ## 2. Verified Current Baseline
 
-The pre-planning baseline was captured directly from the workspace prior to drafting this plan.
+The pre-planning baseline was verified directly against the monorepo workspace.
 
-| Metric | Measured Baseline Value |
-| :--- | :--- |
-| **Git Commit** | `12b90c1ca6992884728514305d09ff82777981c2` |
-| **Git Branch** | `main` |
-| **Working Tree State** | `CLEAN` |
-| **API Test Suite** | 19 test files / 222 tests (199 passed, 23 skipped / fixtures) |
-| **Web Test Suite** | 15 test files / 60 tests (60 passed) |
-| **Shared-Types Test Suite** | 1 test file (`tsc --noEmit`), passed |
-| **Total Test Count** | 34 test files / 282 tests total (282 passed, 0 failed, 0 skipped) |
-| **Type-Check Status** | `PASSED` (`npm run type-check`) |
-| **Build Status** | `PASSED` (`npm run build`) |
-| **Database Schema Modifications** | `0` |
-| **Migrations Added** | `0` |
+| Metric | Verified Baseline Value | Source |
+| :--- | :--- | :--- |
+| **Git Commit** | `12b90c1ca6992884728514305d09ff82777981c2` | `git rev-parse HEAD` |
+| **Git Branch** | `main` | `git status` |
+| **Working Tree State** | `CLEAN` | `git status` |
+| **API Test Suite** | 19 test files / 222 tests (222 passed, 0 failed, 0 skipped) | `npx vitest run` in `apps/api` |
+| **Web Test Suite** | 15 test files / 60 tests (60 passed, 0 failed, 0 skipped) | `npx vitest run` in `apps/web` |
+| **Shared-Types Test Suite** | 1 test file (`tsc --noEmit`), passed | `npm run test` in `packages/shared-types` |
+| **Total Test Suite** | 34 test files / 282 tests (282 passed, 0 failed, 0 skipped) | `npm run test` across monorepo |
+| **Type-Check Status** | `PASSED` | `npm run type-check` |
+| **Build Status** | `PASSED` | `npm run build` |
+| **Web JS Bundle Size (Uncompressed)** | `624.78 kB` (Triggers Rollup >500 kB chunk warning) | `npx vite build` in `apps/web` |
+| **Web JS Bundle Size (Gzip)** | `152.02 kB` | `npx vite build` in `apps/web` |
+| **Database Schema Modifications** | `0` | Codebase audit |
+| **Migrations Added** | `0` | Codebase audit |
 
 ---
 
@@ -63,46 +65,45 @@ graph TD
         PnlSvc --> Drizzle[Drizzle ORM Repositories]
         DashSvc --> Drizzle
         RepSvc --> Drizzle
-        MktSvc --> MktRepo[MarketRepository & InMemoryCache]
+        MktSvc --> MktRepo[MarketRepository]
         Drizzle --> Postgres[(PostgreSQL / PGlite)]
     end
 ```
 
-### Key Performance Bottleneck Taxonomy Identified in Codebase:
-1. **Multi-Portfolio Sequential Processing**: `DashboardService` loops through user portfolios sequentially (`for...of`) calling `PnlService.getPnLSummary()`, creating $N$ sequential database roundtrips instead of parallel execution via `Promise.all()`.
-2. **N+1 Quote Resolution**: In watchlist and portfolio rendering, holding quote lookups are executed sequentially or in unbatched loops across instruments.
-3. **Unindexed Composite Queries**: Filtering transactions by `(portfolio_id, transaction_date)` or `(account_id, transaction_date)` relies on single-column indexes, forcing composite index scans or sorting overhead during historical P&L calculation.
-4. **React Component Prop Churn**: `ResizableTable` primitives and workspace dashboards lack memoized cell renderer functions, leading to re-renders across all table rows on small state ticks.
+### Key Performance Hypotheses Identified in Codebase:
+1. **Multi-Portfolio Sequential Processing**: `DashboardService` loops through user portfolios sequentially (`for...of`) calling `PnlService.getPnLSummary()`, executing sequential database roundtrips rather than parallel execution via `Promise.all()`.
+2. **Database Query Ordering vs Index Scan**: `PnlService.ts` relies on application-level sorting or single-column indexes (`portfolio_id`). Executing `ORDER BY transaction_date ASC, created_at ASC` in database queries guarantees deterministic chronological results for FIFO calculations, but requires composite index evaluation to eliminate DB-side sort operations.
+3. **Frontend Bundle Splitting**: Vite production builds generate a single `index-D3Rk4fvc.js` chunk of 624.78 kB uncompressed (152.02 kB gzip), exceeding Vite's 500 kB chunk threshold warning.
+4. **React Component Prop Churn**: `ResizableTable` primitives and workspace dashboards lack memoized cell renderer components, presenting a rendering optimization candidate for large datasets.
 
 ---
 
 ## 4. Backend Performance Audit
 
 ### 4.1 Fastify Lifecycle & Middleware
-* **Observations**: Fastify uses Zod type providers with `validatorCompiler` and `serializerCompiler`. On every request, validation executes cleanly. However, response payload serialization for large arrays (e.g. historical transactions or full market instrument listings) can be CPU-intensive when serializing deeply nested Zod schemas.
-* **Evidence**: `apps/api/src/app.ts` compiles Zod schemas per route. Payload overhead for 1,000+ item responses (e.g., `/api/v1/markets/stocks`) takes up to 45ms purely in JSON serialization.
-* **Optimization Candidate**: Fastify Fast-Json-Stringify optimization for high-throughput listing endpoints while retaining Zod input validation schemas.
+* **Code Evidence**: `apps/api/src/app.ts` configures Zod type providers with `validatorCompiler` and `serializerCompiler`. On every request, validation executes cleanly. Payload serialization overhead for large arrays (e.g., `/api/v1/markets/stocks`) is a target for optimization.
+* **Target / Hypothesis**: Implement Fastify Fast-Json-Stringify optimization for high-throughput listing endpoints while retaining Zod input validation schemas to reduce serialization latency.
 
-### 4.2 Sequential Service Calls
-* **Observations**: `DashboardService.ts` executes multi-portfolio aggregation in a sequential `for (const p of portfolios)` loop (lines 151–166). Each iteration triggers `PnlService.getPnLSummary()`, which fetches portfolio transactions, groups by instrument, and fetches quotes.
-* **Evidence**: For a user with 5 portfolios, dashboard summary takes $5 \times T_{\text{portfolio\_pnl}}$ sequentially (~120ms total).
-* **Optimization Candidate**: Replace sequential `for` loop with `Promise.all(portfolios.map(p => this.pnlService.getPnLSummary(p.id, userId)))` to execute all portfolio PnL computations concurrently while preserving failure bounds.
+### 4.2 Multi-Portfolio Aggregation & Failure Boundaries
+* **Code Evidence**: `DashboardService.ts` executes multi-portfolio aggregation in a sequential `for (const p of portfolios)` loop (lines 151–166). Each iteration triggers `PnlService.getPnLSummary()`.
+* **Planned Optimization**: Refactor sequential portfolio evaluation to parallel processing using `Promise.all(portfolios.map(...))`.
+* **Failure Semantics Invariant**: The implementation MUST wrap each portfolio promise in an isolated catch block. A failure in one portfolio's P&L calculation MUST NOT alter, corrupt, or remove successful portfolio results, nor impact unrelated dashboard sections. Existing Phase 15 `Promise.allSettled()` subsystem isolation across domain sections (portfolio, watchlist, IPO, khata, alerts) remains strictly preserved.
 
 ---
 
 ## 5. Database Performance Audit
 
-### 5.1 Query Index Inventory & Gap Analysis
+### 5.1 Query Index Inventory & Indexing Analysis
 
-| Table | Existing Indexes | Identified Access Pattern | Audit Finding / Potential Index |
+| Table | Existing Indexes | Identified Access Pattern | Technical Analysis & Clarification |
 | :--- | :--- | :--- | :--- |
-| `portfolio_transactions` | `portfolio_id`, `instrument_id`, `transaction_date` | Chronological ledger fetch: `WHERE portfolio_id = $1 ORDER BY transaction_date ASC, created_at ASC` | Single-column `portfolio_id` index requires explicit sort step for large ledgers. Composite `(portfolio_id, transaction_date ASC)` would eliminate sort overhead. |
-| `khata_transactions` | `account_id`, `transaction_date` | Account ledger fetch: `WHERE account_id = $1 ORDER BY transaction_date ASC` | Composite `(account_id, transaction_date ASC)` avoids sort phase on large digital khata ledgers. |
-| `market_quotes` | `instrument_id` (unique), `data_freshness`, `provider` | Batch quote lookup: `WHERE instrument_id IN (...)` | Unique index on `instrument_id` is highly performant. No index gap found. |
-| `alert_rules` | `user_id`, `status`, `(target_type, target_id)` | Active rule evaluation: `WHERE status = 'ACTIVE'` | Composite `(user_id, status)` optimizes user alert rule queries. |
-| `notifications` | `user_id`, `status`, `created_at` | Unread notifications: `WHERE user_id = $1 AND status = 'UNREAD' ORDER BY created_at DESC` | Composite `(user_id, status, created_at DESC)` would optimize badge and stream rendering. |
+| `portfolio_transactions` | `portfolio_id`, `instrument_id`, `transaction_date` | Chronological ledger fetch: `WHERE portfolio_id = $1 ORDER BY transaction_date ASC, created_at ASC` | **Clarification**: Adding `ORDER BY transaction_date ASC, created_at ASC` to queries guarantees deterministic application behavior and eliminates secondary in-memory array sorting. However, the existing single-column index on `portfolio_id` does NOT eliminate the database-side sorting phase. Completely removing the database sort would require a composite index `(portfolio_id, transaction_date ASC, created_at ASC)`, which is documented as a future migration candidate outside Phase 19 planning scope. |
+| `khata_transactions` | `account_id`, `transaction_date` | Account ledger fetch: `WHERE account_id = $1 ORDER BY transaction_date ASC` | Database-side ordering guarantees deterministic chronological balance computation. Composite `(account_id, transaction_date ASC)` represents a candidate for future schema enhancement. |
+| `market_quotes` | `instrument_id` (unique), `data_freshness`, `provider` | Batch quote lookup: `WHERE instrument_id IN (...)` | Unique index on `instrument_id` is highly performant. No index gap identified. |
+| `alert_rules` | `user_id`, `status`, `(target_type, target_id)` | Active rule evaluation: `WHERE status = 'ACTIVE'` | Existing index `(target_type, target_id)` covers evaluation lookup. |
+| `notifications` | `user_id`, `status`, `created_at` | Unread notifications: `WHERE user_id = $1 AND status = 'UNREAD'` | Existing `user_id` and `status` indexes support retrieval. |
 
-*Note: In accordance with Database Gate rules, zero indexes or migrations are created in Phase 19 planning. These are documented for future implementation under explicit authorization.*
+*Note: In accordance with Database Gate rules, zero indexes or migrations are created during Phase 19 planning.*
 
 ---
 
@@ -111,7 +112,7 @@ graph TD
 ### 6.1 Decimal.js Precision & Chronological FIFO Safety
 * **Audit Rule**: Decimal.js arithmetic MUST NOT be replaced with native IEEE-754 floating-point operations. Native numbers cause rounding errors (e.g. `0.1 + 0.2 !== 0.3`) which degrade monetary precision.
 * **Chronological Processing**: `PnlService.ts` groups transactions by instrument and computes running average cost and realized P&L chronologically.
-* **Optimization Opportunity**: Pre-sort transaction lists in database queries (`ORDER BY transaction_date ASC, created_at ASC`) so that `processLedger()` in `PnlService.ts` does not require secondary in-memory sort passes.
+* **Optimization Candidate**: Rely on database-side `ORDER BY transaction_date ASC, created_at ASC` to eliminate redundant application-layer pre-sort routines.
 
 ---
 
@@ -119,45 +120,49 @@ graph TD
 
 ### 7.1 Dashboard Subsystem Isolation
 * **Observations**: `DashboardService.getDashboardSummary` utilizes `Promise.allSettled()` to fetch portfolio, watchlist, IPO, khata, and alerts sections concurrently. This architecture successfully isolates subsystem failures (Phase 15 guarantee).
-* **Optimization Opportunity**: Within `fetchPortfolioSection()`, multi-portfolio PnL evaluation should be parallelized via `Promise.all()` as noted in Section 4.2.
+* **Optimization Target**: Within `fetchPortfolioSection()`, multi-portfolio PnL evaluation should be parallelized via `Promise.all()` with individual error handling as specified in Section 4.2.
 
 ### 7.2 Report Subsystem Timezone Boundaries
 * **Observations**: `ReportService.ts` executes timezone boundary conversions (`Asia/Kolkata` calendar days converted to UTC query timestamps) to ensure exact daily boundaries.
-* **Constraint**: Optimizations MUST NOT bypass timezone boundary calculations. Aggregations across date ranges (e.g. 30D, 90D, YTD) should compute start/end UTC bounds once and pass them directly to indexed database date queries.
+* **Constraint**: Optimizations MUST NOT alter timezone boundary calculations. Aggregations across date ranges (e.g. 30D, 90D, YTD) should compute start/end UTC bounds once and pass them directly to indexed database date queries.
 
 ---
 
 ## 8. Market Data Performance Audit
 
 ### 8.1 Quote Caching & Stale Fallbacks
-* **Observations**: `MarketDataService.ts` manages quote retrieval with `LIVE`, `DELAYED`, `STALE`, and `UNAVAILABLE` freshness tags.
-* **Cache Architecture**: Market quotes are cached in-memory with a configurable TTL (e.g. 60 seconds for delayed quotes, 15 seconds for live quotes).
-* **Optimization Opportunity**: Implement batch multi-key cache lookups (`mget`) in `MarketDataService` to return cached quotes for $M$ instruments in a single $O(1)$ memory read before querying the database or external stubs.
+* **Actual Code Architecture**: `MarketDataService.ts` interacts with `IMarketRepository.getQuoteByInstrumentId()` and `getBatchQuotes()`. Quotes are persisted in the `market_quotes` database table, and freshness is evaluated against `retrievedAt` and `cacheTtlMs` (default 15,000ms). There is currently no separate in-memory `Map` cache class.
+* **Planned Optimization**: Introduce a true in-memory caching layer (e.g. `Map<string, { quote: EnrichedMarketQuote; expiresAt: number }>`) wrapping `IMarketRepository` calls inside `MarketDataService`.
+* **Freshness Semantics Preservation**: The cache layer MUST strictly preserve canonical freshness tags: `LIVE`, `DELAYED`, `EOD`, `STALE`, and `UNAVAILABLE`. Stale or failed provider lookups must never be falsely marked as `LIVE`.
 
 ---
 
 ## 9. Frontend Performance Audit
 
 ### 9.1 Component Rendering & Prop Churn
-* **Observations**: `apps/web/src/components/common/ResizableTable.tsx` renders dynamic tabular data for portfolios, watchlists, khata ledgers, and reports.
-* **Evidence**: When sorting or filtering tables with 200+ rows, the entire table body re-renders due to inline cell functions and unmemoized row components.
-* **Optimization Candidate**: Wrap table row renderers in `React.memo` with custom prop equality checks (`prevProps.row.id === nextProps.row.id`).
+* **Hypothesis**: `apps/web/src/components/common/ResizableTable.tsx` renders dynamic tabular data for portfolios, watchlists, khata ledgers, and reports. Profiling during implementation will measure whether unmemoized row components cause re-renders across all rows during minor state updates.
+* **Optimization Target**: Extract table row rendering logic into a `React.memo`-wrapped subcomponent.
 
 ### 9.2 Global Command Palette Search
 * **Observations**: `CommandPalette.tsx` filters 16 system commands on every keystroke in `onChange`.
-* **Optimization Candidate**: Memoize filtered command lists using `React.useMemo(() => commands.filter(...), [query])` to prevent array re-allocation on un-related render cycles.
+* **Optimization Target**: Wrap command filtering in `React.useMemo(() => commands.filter(...), [query])` to eliminate unnecessary array re-allocations on unrelated render cycles.
 
 ---
 
 ## 10. Build & Bundle Performance Audit
 
-### 10.1 Vite Build Artifact Analysis
-* **Observations**: `npm run build` compiles `shared-types`, `apps/api`, and `apps/web` via TypeScript (`tsc -b`). Vite bundles web static assets into `dist/`.
-* **Optimization Candidate**: Implement manual chunk splitting in `vite.config.ts` for heavy third-party vendor modules (e.g. Lucide icons, React Router DOM) to optimize HTTP/2 browser caching and reduce initial index bundle size.
+### 10.1 Vite Build Artifact Analysis (Measured Evidence)
+* **Measured Baseline**: Executing `npx vite build` in `apps/web` generates:
+  * `dist/index.html`: 1.16 kB (gzip: 0.58 kB)
+  * `dist/assets/index-DEjqn_rA.css`: 3.25 kB (gzip: 1.30 kB)
+  * `dist/assets/index-D3Rk4fvc.js`: **624.78 kB uncompressed (152.02 kB gzip)**
+  * Vite Output Warning: `(!) Some chunks are larger than 500 kB after minification.`
+* **Evidence Justification**: Rollup explicitly flags `index-D3Rk4fvc.js` as exceeding 500 kB uncompressed.
+* **Planned Optimization**: Configure `build.rollupOptions.output.manualChunks` in `vite.config.ts` to split vendor dependencies (e.g. `react-router-dom`, `lucide-react`) into separate vendor chunks, resolving the chunk size warning and optimizing browser caching.
 
 ---
 
-## 11. Caching Strategy
+## 11. Caching Strategy & Tenant Security
 
 The proposed Phase 19 caching architecture strictly enforces tenant isolation and short TTL bounds.
 
@@ -173,19 +178,19 @@ graph LR
     CacheStore --> Res
 ```
 
-### Cache Definition Inventory
+### Cache Definition Inventory & Security Invariants
 
-| Cache Name | Key Schema | Source of Truth | Default TTL | Invalidation Trigger | Security Boundary |
+| Cache Name | Key Schema | Source of Truth | Default TTL | Invalidation Trigger | Security Boundary Invariant |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Market Quote Cache** | `mkt:quote:{instrumentId}` | `market_quotes` DB / Provider | 15s (LIVE) / 60s (DELAYED) | Automated TTL expiry / Provider webhook | Public market data (no user isolation required) |
-| **User Portfolio Summary Cache** | `user:{userId}:pnl:{portfolioId}` | `portfolio_transactions` DB | 30s | Any trade POST/PUT/DELETE for portfolio | Strict tenant boundary (`userId` isolated) |
-| **User Khata Summary Cache** | `user:{userId}:khata:summary` | `khata_transactions` DB | 30s | Any Khata transaction or reversal | Strict tenant boundary (`userId` isolated) |
+| **Market Quote Cache** | `mkt:quote:{instrumentId}` | `market_quotes` DB / Provider | 15s (LIVE) / 60s (DELAYED) | Automated TTL expiry / Provider update | Public market data (no user identity required) |
+| **User Portfolio Summary Cache** | `user:{userId}:pnl:{portfolioId}` | `portfolio_transactions` DB | 30s | Any trade POST/PUT/DELETE for portfolio | **Strict Tenant Safety**: Key MUST include `userId`. Cached values for User A must never be accessible to User B. |
+| **User Khata Summary Cache** | `user:{userId}:khata:summary` | `khata_transactions` DB | 30s | Any Khata transaction or reversal | **Strict Tenant Safety**: Key MUST include `userId`. |
 
 ---
 
 ## 12. Benchmarking Strategy
 
-Deterministic performance benchmarks will be constructed using isolated, non-flaky test datasets.
+Deterministic performance benchmarks will be constructed to evaluate workload execution time before and after optimization.
 
 ### Benchmark Workload Scenarios:
 1. **Small Portfolio**: 1 portfolio, 5 instruments, 20 transactions.
@@ -194,19 +199,21 @@ Deterministic performance benchmarks will be constructed using isolated, non-fla
 4. **Digital Khata Ledger**: 5 accounts, 1,000 transactions with running balance checks.
 5. **Dashboard Synthesis**: Combined large portfolio + khata + alerts + watchlists.
 
+*Note: Benchmarks will be executed via separate dedicated profiling scripts (`npm run benchmark`) and will not convert functional unit tests into flaky, timing-sensitive assertions.*
+
 ---
 
 ## 13. Performance Budgets
 
-| Subsystem / Endpoint | Measured Baseline (Estimated) | Proposed Phase 19 Target | Budget Threshold |
-| :--- | :--- | :--- | :--- |
-| `GET /api/v1/health` | ~5 ms | < 5 ms | 10 ms |
-| `GET /api/v1/dashboard/summary` | ~120 ms | < 35 ms | 50 ms |
-| `GET /api/v1/portfolios/:id/pnl` | ~45 ms | < 15 ms | 25 ms |
-| `GET /api/v1/reports/portfolio-performance` | ~85 ms | < 25 ms | 40 ms |
-| `GET /api/v1/markets/instruments` | ~50 ms | < 15 ms | 30 ms |
-| Web Initial Bundle Size (Gzip) | ~220 KB | < 160 KB | 200 KB |
-| ResizableTable Row Re-render Time | ~18 ms | < 3 ms | 5 ms |
+| Metric / Endpoint | Measured Baseline | Proposed Target | Budget Threshold | Source / Verification Method |
+| :--- | :--- | :--- | :--- | :--- |
+| **API Readiness (`GET /ready`)** | `5.6 ms` (Measured) | `< 5 ms` | `15 ms` | Fastify integration test timing |
+| **Dashboard Summary (`GET /dashboard/summary`)** | Estimated / Hypothesis | `< 35 ms` | `50 ms` | Pre/Post implementation benchmark script |
+| **Portfolio P&L (`GET /portfolios/:id/pnl`)** | Estimated / Hypothesis | `< 15 ms` | `25 ms` | Pre/Post implementation benchmark script |
+| **Reports Summary (`GET /reports/portfolio-performance`)** | Estimated / Hypothesis | `< 25 ms` | `40 ms` | Pre/Post implementation benchmark script |
+| **Web JS Single Chunk Size (Uncompressed)** | `624.78 kB` (Measured) | `< 500.00 kB` | `500.00 kB` | `npx vite build` Rollup chunk warning |
+| **Web JS Total Gzip Size** | `152.02 kB` (Measured) | `< 145.00 kB` | `180.00 kB` | `npx vite build` output |
+| **ResizableTable Row Re-render Time** | Estimated / Hypothesis | `< 3 ms` | `5 ms` | React DevTools Profiler |
 
 ---
 
@@ -236,12 +243,12 @@ Optimizations must preserve all Phase 18 concurrency guarantees:
 
 | Optimization ID | Classification Category | Targeted Component | Summary of Proposed Change |
 | :--- | :--- | :--- | :--- |
-| **OPT-01** | B. Safe Application Optimization | `DashboardService.ts` | Parallelize multi-portfolio PnL evaluation using `Promise.all()` instead of sequential `for` loop. |
-| **OPT-02** | B. Safe Application Optimization | `PnlService.ts` | Ensure transaction fetch queries include `ORDER BY transaction_date ASC, created_at ASC` to streamline FIFO processing. |
-| **OPT-03** | E. Caching Optimization | `MarketDataService.ts` | Add in-memory batch lookup map for instrument quotes to reduce DB reads on watchlist/portfolio render. |
-| **OPT-04** | D. Frontend Optimization | `ResizableTable.tsx` | Wrap table row components in `React.memo` to prevent unnecessary cell re-renders. |
+| **OPT-01** | B. Safe Application Optimization | `DashboardService.ts` | Parallelize multi-portfolio PnL evaluation using `Promise.all()` with individual error catch blocks. |
+| **OPT-02** | B. Safe Application Optimization | `PnlService.ts` | Rely on DB-side `ORDER BY transaction_date ASC, created_at ASC` to eliminate redundant application pre-sorting. |
+| **OPT-03** | E. Caching Optimization | `MarketDataService.ts` | Introduce in-memory batch quote lookup cache wrapping `IMarketRepository` while preserving freshness tags. |
+| **OPT-04** | D. Frontend Optimization | `ResizableTable.tsx` | Wrap table row subcomponents in `React.memo` to prevent unnecessary cell re-renders. |
 | **OPT-05** | D. Frontend Optimization | `CommandPalette.tsx` | Wrap command filter operation in `React.useMemo` to eliminate unnecessary array allocations. |
-| **OPT-06** | F. Configuration Optimization | `vite.config.ts` | Implement manual vendor chunk splitting for Lucide icons and React Router DOM. |
+| **OPT-06** | F. Configuration Optimization | `vite.config.ts` | Implement manual vendor chunk splitting for Lucide icons and React Router DOM to resolve Rollup >500 kB warning. |
 | **OPT-07** | C. Database Optimization (Candidate Only) | `schema/portfolio-transactions.ts` | Document composite index `(portfolio_id, transaction_date)` as a future migration candidate. |
 
 ---
@@ -258,20 +265,32 @@ Optimizations must preserve all Phase 18 concurrency guarantees:
     portfolios.map(p => this.pnlService.getPnLSummary(p.id, userId).catch(() => null))
   );
   ```
-* **Expected Result**: Reduces multi-portfolio dashboard response latency by up to 70%.
-* **Affected Logic / Migration**: Financial logic unaffected; 0 migrations; 0 contract changes.
+* **Expected Result**: Target reduction in multi-portfolio dashboard response latency (to be validated by pre/post benchmark).
+* **Affected Logic / Migration**: Financial logic unaffected; 0 migrations; 0 contract changes. Subsystem isolation preserved.
 
 ### 17.2 `apps/api/src/domain/services/MarketDataService.ts`
-* **Current Behavior**: Fetches quotes individually or in un-cached batch database passes.
-* **Planned Optimization**: Introduce an in-memory `Map<string, { quote: MarketQuote; expiresAt: number }>` cache with TTL check prior to repository queries.
-* **Expected Result**: Cuts market quote retrieval latency from ~15ms to < 1ms for cache hits.
-* **Affected Logic / Migration**: Financial logic unaffected; 0 migrations; 0 contract changes.
+* **Current Behavior**: Fetches quotes via `IMarketRepository` database passes.
+* **Planned Optimization**: Introduce an in-memory `Map<string, { quote: EnrichedMarketQuote; expiresAt: number }>` cache wrapping repository reads.
+* **Expected Result**: Target reduction in market quote lookup latency for cache hits (to be validated by pre/post benchmark).
+* **Affected Logic / Migration**: Financial logic unaffected; 0 migrations; 0 contract changes. Freshness tags preserved.
 
-### 17.3 `apps/web/src/components/common/ResizableTable.tsx`
-* **Current Behavior**: Renders all table rows dynamically without memoization.
-* **Planned Optimization**: Extract `TableRowComponent` and wrap with `React.memo`.
-* **Expected Result**: Eliminates table re-rendering latency on non-data UI state changes.
-* **Affected Logic / Migration**: UI appearance unaffected; accessibility preserved; 0 contract changes.
+### 17.3 `apps/web/vite.config.ts`
+* **Current Behavior**: Default single bundle output producing 624.78 kB JS chunk.
+* **Planned Optimization**: Add `manualChunks` to split vendor dependencies:
+  ```ts
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          icons: ['lucide-react']
+        }
+      }
+    }
+  }
+  ```
+* **Expected Result**: Resolves Vite/Rollup >500 kB chunk size warning; produces smaller individual JS assets.
+* **Affected Logic / Migration**: Application code unaffected; 0 contract changes.
 
 ---
 
@@ -288,7 +307,7 @@ Upon future authorization of Phase 19 implementation, verification will follow a
    npm run build
    ```
    All 34 test files (282 tests) must pass with zero failures.
-4. **Post-Implementation Benchmark Verification**: Verify latency metrics meet or exceed the Phase 19 Performance Budgets defined in Section 13.
+4. **Post-Implementation Benchmark Verification**: Verify latency and bundle metrics meet or exceed the Phase 19 Performance Budgets defined in Section 13.
 
 ---
 
@@ -316,11 +335,14 @@ FINALIZED
 Baseline Verified:
 YES
 
-Performance Bottlenecks Identified:
-5
+Test Baseline Internally Consistent:
+YES (34 files / 282 tests / 282 passed / 0 failed / 0 skipped across monorepo)
 
-Measured Bottlenecks:
-5
+Measured Performance Bottlenecks:
+1 (Vite bundle size 624.78 kB > 500 kB chunk warning threshold)
+
+Performance Hypotheses / Candidates:
+6
 
 Proposed Optimizations:
 7
