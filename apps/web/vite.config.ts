@@ -11,10 +11,22 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          icons: ['lucide-react'],
-          utils: ['decimal.js', 'zod', 'zustand']
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) {
+              return 'icons';
+            }
+            if (id.includes('decimal.js') || id.includes('zod') || id.includes('zustand')) {
+              return 'utils';
+            }
+            return 'vendor';
+          }
+          if (id.includes('/src/pages/')) {
+            return 'pages';
+          }
+          if (id.includes('/src/components/')) {
+            return 'components';
+          }
         }
       }
     }
