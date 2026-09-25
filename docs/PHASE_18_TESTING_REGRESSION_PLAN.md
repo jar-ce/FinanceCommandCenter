@@ -3,7 +3,7 @@
 **Project Path**: `D:\FinanceCommandCenter`  
 **GitHub Repository**: `https://github.com/jar-ce/FinanceCommandCenter.git`  
 **Branch**: `main`  
-**Phase Status**: **PHASE 18 PLANNING COMPLETE — AWAITING IMPLEMENTATION AUTHORIZATION**  
+**Phase Status**: **PHASE 18 PLANNING FINALIZED — AWAITING IMPLEMENTATION AUTHORIZATION**  
 **Execution Date**: September 25, 2026  
 
 ---
@@ -49,7 +49,8 @@ The APEX OS testing architecture is structured around a fast, deterministic, non
 2. **Frontend UI Harness (`apps/web/src/__tests__/`)**:
    - **Framework**: Vitest + React Testing Library + `@testing-library/user-event`.
    - **Environment**: DOM environment powered by Happy-DOM.
-   - **Component Mocking**: Custom lightweight canvas and window resize mocks for UI components (`ResizableTable`, Recharts wrapper).
+   - **Chart & Graphics Architecture**: **Native SVG chart components and CSS tabular primitives** (`PortfolioSnapshot`, `PortfolioReportView`, `ReportHeader`, `AssetAllocationView`). In accordance with Phase 16 specifications, no heavy third-party charting libraries (such as Recharts) are installed or imported.
+   - **Component Mocking**: Custom lightweight canvas and window resize mocks for UI components (`ResizableTable`).
 
 3. **Shared Types Package (`packages/shared-types/`)**:
    - **Validation**: TypeScript compiler (`tsc --noEmit`) verifying schema contracts and DTO interfaces across API and Frontend.
@@ -119,29 +120,40 @@ apps/web/src/__tests__/
 
 ---
 
-## 6. Financial Integrity Test Strategy
+## 6. Financial Integrity & Canonical P&L Test Strategy
 
 Finance Command Center — APEX OS enforces strict financial precision using PostgreSQL `NUMERIC(18, 4)` columns and `Decimal.js` in TypeScript.
 
 ### 6.1 Digital Khata Invariants
 - **Transaction Math**: $\text{Balance} = \sum \text{MONEY\_IN} - \sum \text{MONEY\_OUT}$.
 - **Immutability & Reversals**: Transactions are never hard-deleted; reversals create a balancing entry.
-- **Double-Reversal Prevention**: Attempting to reverse an already-reversed transaction must throw `400 Bad Request`.
+- **Double-Reversal Prevention**: Attempting to reverse an already-reversed transaction throws `400 Bad Request`.
 - **Validation**: Negative amounts ($0.00$) and invalid date formats are strictly rejected.
 
 ### 6.2 Portfolio & Holdings Invariants
 - **BUY Transaction**: Increases position quantity; updates weighted-average cost:
   $$\text{WAC}_{\text{new}} = \frac{(\text{Qty}_{\text{old}} \times \text{WAC}_{\text{old}}) + (\text{Qty}_{\text{buy}} \times \text{Price}_{\text{buy}})}{\text{Qty}_{\text{old}} + \text{Qty}_{\text{buy}}}$$
 - **SELL Transaction**: Reduces position quantity; weighted-average cost remains unchanged.
-- **Oversell Prevention**: Attempting to SELL a quantity greater than current holding quantity throws `400 Bad Request`.
+- **Oversell Prevention**: Attempting to SELL a quantity greater than current holding quantity throws `422 Unprocessable Entity` (`OVERSELL_ERROR`).
 - **Zero/Negative Quantity Protection**: Holdings with $0$ quantity are archived/hidden from active holdings view.
 
-### 6.3 P&L Analytics Engine Invariants
-- **Realized P&L**: Computed strictly on closed/sold quantities:
-  $$\text{Realized P\&L} = (\text{Price}_{\text{sell}} - \text{WAC}) \times \text{Qty}_{\text{sell}}$$
-- **Unrealized P&L**: Computed on active open positions against current market quote:
-  $$\text{Unrealized P\&L} = (\text{Price}_{\text{market}} - \text{WAC}) \times \text{Qty}_{\text{current}}$$
-- **Stale Market Data Handling**: If market quote is marked `STALE` or unavailable, Unrealized P&L uses last known valid closing price and flags warning telemetry.
+### 6.3 Canonical P&L Service (`PnlService.ts`) Quote-Fallback Behavior
+Analysis of the authoritative `PnlService.ts` implementation establishes the exact runtime valuation & market data fallback rules:
+
+- **LIVE / DELAYED / EOD**:
+  - `quote.lastPrice` is present and multiplied by holding `quantity` to calculate `marketValue` and `unrealizedPnL`.
+  - Holding is counted in `valuedHoldingsCount`. `overallFreshness` is set to `LIVE`, `DELAYED`, or `EOD`.
+- **STALE**:
+  - `quote.lastPrice` is present and used for market value and unrealized P&L calculations.
+  - Holding `dataFreshness` reports `STALE`; `overallFreshness` in `ValuationCoverageRecord` is set to `STALE`.
+- **UNAVAILABLE / Missing Quote**:
+  - If `quote` is missing or `quote.lastPrice` is `null`/undefined, holding is counted in `unvaluedHoldingsCount`.
+  - Holding `marketValue`, `unrealizedPnL`, and `totalPnL` return `null` (**zero fabrication is strictly prevented**).
+  - `coveragePercentage` is reduced below $100\%$.
+  - `xirrStatus` evaluates to `'UNAVAILABLE'` with message `"XIRR requires FULL valuation coverage (100% of active holdings valued)"`.
+- **Simple Return %**:
+  - Calculated strictly as `unrealizedPnL / totalAcquisitionCost * 100` when NO SELL transactions have occurred.
+  - If SELL transactions exist, `simpleReturnPercent` returns `null` to avoid misleading return metrics on active cost basis.
 
 ---
 
@@ -174,7 +186,7 @@ flowchart TD
 
 ## 8. Cross-User Isolation / IDOR Matrix
 
-To prevent Insecure Direct Object References (IDOR), all private endpoints are tested against multi-tenant User A vs. User B boundaries:
+To prevent Insecure Direct Object References (IDOR), all **70 private endpoints** are tested against multi-tenant User A vs. User B boundaries:
 
 | Resource Class | READ Action | CREATE Action | UPDATE Action | DELETE/REVERSE Action | Expected Security Result |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -189,17 +201,35 @@ To prevent Insecure Direct Object References (IDOR), all private endpoints are t
 
 ---
 
-## 9. API Contract & Endpoint Inventory Regression
+## 9. Verified API Contract & Route Inventory
 
-The repository contains exactly **75 REST endpoints**. All 75 endpoints are audited for authentication, validation, and standardized JSON error response structure:
+The repository Fastify route registry contains **exactly 74 REST endpoints**:
+- **Public Endpoints (Count: 2)**:
+  - `GET /api/v1/health`
+  - `GET /api/v1/ready`
+- **Privileged Endpoints (Count: 2)**:
+  - `POST /api/v1/market/instruments` (Admin / System role required)
+  - `POST /api/v1/ipo/sync` (Admin / System role required)
+- **Private Endpoints (Count: 70)**:
+  - Khata (8 routes): List, Create, Get, Patch, Archive, Get Transactions, Post Transaction, Reverse Transaction.
+  - IPO Master (2 routes): List IPOs, Get IPO Detail.
+  - IPO Applications (5 routes): List Applications, Create, Get, Patch, Cancel.
+  - IPO Allotments (4 routes): List Allotments, Get Detail, Check Allotment, Verify Allotment.
+  - Market Data (5 routes): Search Instruments, Get Instrument, Get Quote, Get History, Get Status.
+  - Watchlists (9 routes): List, Create, Get, Patch, Archive, Restore, Add Item, Remove Item, Reorder Items.
+  - Portfolios (9 routes): List, Create, Get, Patch, Archive, Restore, Get Holdings, Get Transactions, Post Transaction.
+  - P&L Analytics (4 routes): Get Summary, Get Holding P&L, Get Realized P&L, Get Performance Metrics.
+  - Alerts (9 routes): List Rules, Evaluate All, Create, Get, Patch, Pause, Resume, Archive, Evaluate Single.
+  - Notifications (7 routes): List, Unread Count, Mark Read All, Get, Mark Read, Mark Unread, Archive.
+  - Dashboard (1 route): Get Summary.
+  - Reports (7 routes): Summary, Portfolio Performance, Asset Allocation, Realized P&L, Khata Cash Flow, IPO Participation, Alerts Analytics.
 
+All 74 endpoints follow the standardized JSON response structure:
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "UNAUTHORIZED | FORBIDDEN | NOT_FOUND | VALIDATION_ERROR | INTERNAL_ERROR",
-    "message": "Human-readable error message without leaking sensitive internal details"
-  }
+  "success": true,
+  "data": { ... },
+  "timestamp": "2026-09-25T10:20:00.000Z"
 }
 ```
 
@@ -243,7 +273,7 @@ Market data and IPO providers operate under strict fallback policies:
 ## 12. Dashboard & Reports Regression Strategy
 
 - **Dashboard Telemetry (`/api/v1/dashboard/summary`)**: Aggregates telemetry across Portfolios, Khata, IPOs, and Alerts using `Promise.allSettled()`. Partial subsystem failure does NOT crash the entire dashboard.
-- **Reports Engine (`/api/v1/reports/*`)**: Supports 7 report views (Summary, Portfolio Performance, Asset Allocation, Realized P&L, Khata Cash Flow, IPO Participation, Alerts Analytics). Enforces Asia/Kolkata calendar semantics and UTC date conversions.
+- **Reports Engine (`/api/v1/reports/*`)**: Supports 7 report views. Enforces Asia/Kolkata calendar semantics and UTC date conversions.
 
 ---
 
@@ -267,17 +297,17 @@ Market data and IPO providers operate under strict fallback policies:
 
 ---
 
-## 15. Dependency Residual Risk Regression Plan
+## 15. Dependency Residual Risk & Behavioral Test Definitions
 
-Phase 17 documented 5 critical/high dependency risks. Phase 18 provides targeted regression test coverage around package-sensitive code paths:
+Phase 17 documented 5 critical/high dependency risks. Phase 18 defines behavioral test protections for each package without modifying dependencies:
 
-| Package | Severity | Advisory | Technical Regression Protection |
+| Package | Severity | Advisory ID | Technical Behavioral Test Definition |
 | :--- | :--- | :--- | :--- |
-| `vitest` | CRITICAL | Vitest UI file read | Headless test execution (`vitest run`); UI server mode disabled |
-| `drizzle-orm` | HIGH | Raw SQL identifier injection | Parameterized Drizzle query builder tests (`db.select()`, `db.insert()`) |
-| `fastify` | HIGH | DoS / header tabs / stream leak | Zod body validation tests & host header sanitization tests |
-| `find-my-way` | HIGH | HTTP/2 router DDoS | HTTP/1.1 Fastify configuration tests |
-| `vite` | HIGH | Dev server path traversal | Production static build serving tests |
+| **`vitest`** | CRITICAL | GHSA-5xrq-8626-4rwp | Verify test execution runs strictly via headless CLI (`vitest run`). Verify `vitest --ui` server mode is absent from production startup scripts. |
+| **`drizzle-orm`** | HIGH | GHSA-gpj5-g38j-94v9 | Verify repository queries use parameterized Drizzle query builders (`db.select()`, `db.insert()`). Verify zero raw SQL string concatenation occurs in query methods. |
+| **`fastify`** | HIGH | GHSA-mrq3-vjjr-p77c | Verify Fastify server registers `onSend` security header hook, Zod body validation compiler, and sanitizes Host headers on HTTP requests. |
+| **`find-my-way`** | HIGH | GHSA-c96f-x56v-gq3h | Verify Fastify router operates on HTTP/1.1 without enabling experimental HTTP/2 server mode. Verify all 74 REST endpoints dispatch deterministically. |
+| **`vite`** | HIGH | GHSA-fx2h-pf6j-xcff | Verify Vite dev server is used strictly for build compilation. Verify production Web build assets (`apps/web/dist`) are served as static files. |
 
 ---
 
@@ -344,29 +374,47 @@ Strictly excluded from Phase 18:
 
 ---
 
-## 21. Approval Gate & Phase Status
+## 21. Approval Gate & Final Declarations
 
 ```text
-PHASE 18 — TESTING & REGRESSION PLANNING COMPLETE
-Repository Inspection: COMPLETE
-Current Test Baseline: VERIFIED (30 Test Files | 242 Tests Passed)
-Test Architecture Review: COMPLETE
-Regression Matrix: COMPLETE
-Financial Integrity Test Plan: COMPLETE
-Security Regression Plan: COMPLETE
-API Regression Plan: COMPLETE
-Frontend Regression Plan: COMPLETE
-Coverage Gap Analysis: COMPLETE
-Concurrency Test Plan: COMPLETE
-Dependency Regression Plan: COMPLETE
+Exact REST Endpoint Count: 74
+Public Endpoints: 2
+Private Endpoints: 70
+Privileged Endpoints: 2
+Chart Dependency Status: NATIVE SVG & CSS TABULAR PRIMITIVES (ZERO THIRD-PARTY CHART LIBRARIES)
+Canonical P&L Quote-Fallback Behavior: VERIFIED (PnlService.ts — STALE updates freshness, UNAVAILABLE returns null without zero fabrication)
+Database Changes: 0
+Implementation: NOT STARTED
+Tests Added: 0
+Dependency Changes: 0
+
+PHASE 18 — TESTING & REGRESSION PLAN FINALIZED
+Exact Route Inventory: VERIFIED
+Public Endpoint Count: VERIFIED
+Private Endpoint Count: VERIFIED
+Privileged Endpoint Count: VERIFIED
+Test Baseline: VERIFIED
+Financial Test Strategy: COMPLETE
+Security Regression Strategy: COMPLETE
+API Regression Strategy: COMPLETE
+Frontend Regression Strategy: COMPLETE
+Concurrency Strategy: COMPLETE
+Dependency Regression Strategy: COMPLETE
+Canonical P&L Behavior: VERIFIED
 File-by-File Plan: COMPLETE
 Database Gate: PASSED
-
-Implementation: NOT STARTED
-Application Code Changes: 0
-Schema Changes: 0
-Migrations: 0
-Dependency Changes: 0
+Implementation:
+NOT STARTED
+Application Code Changes:
+0
+Test Code Changes:
+0
+Schema Changes:
+0
+Migrations:
+0
+Dependency Changes:
+0
 
 GitHub Sync: VERIFIED
 GitHub Branch: main
