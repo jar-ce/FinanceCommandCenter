@@ -25,6 +25,61 @@ interface ResizableTableProps<T> {
   onRowClick?: (row: T) => void;
 }
 
+interface TableRowProps<T> {
+  row: T;
+  columns: ColumnDef<T>[];
+  columnWidths: Record<string, number>;
+  onRowClick?: (row: T) => void;
+}
+
+function TableRowInner<T>({
+  row,
+  columns,
+  columnWidths,
+  onRowClick
+}: TableRowProps<T>) {
+  return (
+    <tr
+      onClick={() => onRowClick && onRowClick(row)}
+      style={{
+        borderBottom: '1px solid var(--color-border-subtle)',
+        cursor: onRowClick ? 'pointer' : 'default',
+        transition: 'background-color var(--transition-fast)'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--color-bg-elevated)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'transparent';
+      }}
+    >
+      {columns.map((col) => {
+        const width = columnWidths[col.id] || col.width || 150;
+        return (
+          <td
+            key={col.id}
+            style={{
+              width: `${width}px`,
+              padding: 'var(--space-3) var(--space-4)',
+              textAlign: col.numeric ? 'right' : 'left',
+              color: 'var(--color-text-primary)',
+              fontFamily: col.numeric ? 'var(--font-mono)' : 'var(--font-sans)',
+              fontVariantNumeric: col.numeric ? 'tabular-nums lining-nums' : 'normal',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {col.accessor(row)}
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
+const TableRow = React.memo(TableRowInner) as typeof TableRowInner;
+
 export function ResizableTable<T>({
   columns: initialColumns,
   data,
@@ -185,43 +240,13 @@ export function ResizableTable<T>({
           {data.map((row) => {
             const key = keyExtractor(row);
             return (
-              <tr
+              <TableRow
                 key={key}
-                onClick={() => onRowClick && onRowClick(row)}
-                style={{
-                  borderBottom: '1px solid var(--color-border-subtle)',
-                  cursor: onRowClick ? 'pointer' : 'default',
-                  transition: 'background-color var(--transition-fast)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-bg-elevated)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {initialColumns.map((col) => {
-                  const width = columnWidths[col.id] || col.width || 150;
-                  return (
-                    <td
-                      key={col.id}
-                      style={{
-                        width: `${width}px`,
-                        padding: 'var(--space-3) var(--space-4)',
-                        textAlign: col.numeric ? 'right' : 'left',
-                        color: 'var(--color-text-primary)',
-                        fontFamily: col.numeric ? 'var(--font-mono)' : 'var(--font-sans)',
-                        fontVariantNumeric: col.numeric ? 'tabular-nums lining-nums' : 'normal',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}
-                    >
-                      {col.accessor(row)}
-                    </td>
-                  );
-                })}
-              </tr>
+                row={row}
+                columns={initialColumns}
+                columnWidths={columnWidths}
+                onRowClick={onRowClick}
+              />
             );
           })}
         </tbody>

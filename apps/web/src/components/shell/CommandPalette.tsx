@@ -63,10 +63,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     { id: 'settings', label: 'Go to Settings', category: 'System', path: '/settings', icon: <Settings size={16} /> }
   ];
 
-  const filteredCommands = commands.filter(
-    (cmd) =>
-      cmd.label.toLowerCase().includes(query.toLowerCase()) ||
-      cmd.category.toLowerCase().includes(query.toLowerCase())
+  const filteredCommands = React.useMemo(
+    () =>
+      commands.filter(
+        (cmd) =>
+          cmd.label.toLowerCase().includes(query.toLowerCase()) ||
+          cmd.category.toLowerCase().includes(query.toLowerCase())
+      ),
+    [query]
   );
 
   useEffect(() => {

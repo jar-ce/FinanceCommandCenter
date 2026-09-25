@@ -148,21 +148,23 @@ export class DashboardService {
     let valuedHoldingsCountSum = 0;
     const freshnessList: MarketDataFreshness[] = [];
 
-    for (const p of portfolios) {
-      try {
-        const summary = await this.pnlService.getPnLSummary(p.id, userId);
-        aggMarketValue = aggMarketValue.plus(summary.totalMarketValue);
-        aggAcquisitionCost = aggAcquisitionCost.plus(summary.totalAcquisitionCost);
-        aggRealizedPnL = aggRealizedPnL.plus(summary.realizedPnL);
-        aggUnrealizedPnL = aggUnrealizedPnL.plus(summary.unrealizedPnL);
-        aggTotalPnL = aggTotalPnL.plus(summary.totalPnL);
+    const portfolioResults = await Promise.all(
+      portfolios.map((p) =>
+        this.pnlService.getPnLSummary(p.id, userId).catch(() => null)
+      )
+    );
 
-        totalHoldingsCountSum += summary.valuationCoverage.totalHoldingsCount;
-        valuedHoldingsCountSum += summary.valuationCoverage.valuedHoldingsCount;
-        freshnessList.push(summary.valuationCoverage.overallFreshness);
-      } catch {
-        // Skip individual portfolio failure during multi-portfolio aggregation
-      }
+    for (const summary of portfolioResults) {
+      if (!summary) continue;
+      aggMarketValue = aggMarketValue.plus(summary.totalMarketValue);
+      aggAcquisitionCost = aggAcquisitionCost.plus(summary.totalAcquisitionCost);
+      aggRealizedPnL = aggRealizedPnL.plus(summary.realizedPnL);
+      aggUnrealizedPnL = aggUnrealizedPnL.plus(summary.unrealizedPnL);
+      aggTotalPnL = aggTotalPnL.plus(summary.totalPnL);
+
+      totalHoldingsCountSum += summary.valuationCoverage.totalHoldingsCount;
+      valuedHoldingsCountSum += summary.valuationCoverage.valuedHoldingsCount;
+      freshnessList.push(summary.valuationCoverage.overallFreshness);
     }
 
     // Simple Return % = (Total Realized PnL + Total Unrealized PnL) / Total Acquisition Cost

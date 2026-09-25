@@ -14,10 +14,16 @@ export interface MarketServiceOptions {
   cacheTtlMs?: number; // Default 15,000 ms
 }
 
+interface InMemoQuoteEntry {
+  quote: EnrichedMarketQuote;
+  expiresAt: number;
+}
+
 export class MarketDataService {
   private repository: IMarketRepository;
   private provider: IMarketDataProvider;
   private cacheTtlMs: number;
+  private inMemoryQuoteCache = new Map<string, InMemoQuoteEntry>();
 
   constructor(
     repository: IMarketRepository,
@@ -27,6 +33,14 @@ export class MarketDataService {
     this.repository = repository;
     this.provider = provider;
     this.cacheTtlMs = options?.cacheTtlMs ?? 15_000;
+  }
+
+  public getInMemoryCacheSize(): number {
+    return this.inMemoryQuoteCache.size;
+  }
+
+  public clearInMemoryCache(): void {
+    this.inMemoryQuoteCache.clear();
   }
 
   /**
@@ -88,18 +102,30 @@ export class MarketDataService {
    *    - If no cached quote exists: Return quote record marked 'UNAVAILABLE' with null prices.
    */
   async getQuote(instrumentId: string): Promise<EnrichedMarketQuote | null> {
+    // 0. In-memory cache hit check
+    const inMemo = this.inMemoryQuoteCache.get(instrumentId);
+    if (inMemo && Date.now() < inMemo.expiresAt) {
+      if (inMemo.quote.dataFreshness === 'LIVE' || inMemo.quote.dataFreshness === 'EOD') {
+        return inMemo.quote;
+      }
+    }
+
     const instrument = await this.repository.getInstrumentById(instrumentId);
     if (!instrument) return null;
 
     const cachedQuote = await this.repository.getQuoteByInstrumentId(instrumentId);
 
-    // 1. Check cache freshness
+    // 1. Check DB cache freshness
     if (cachedQuote && cachedQuote.retrievedAt) {
       const ageMs = Date.now() - new Date(cachedQuote.retrievedAt).getTime();
       const isFresh = ageMs < this.cacheTtlMs;
       const isFreshnessValid = cachedQuote.dataFreshness === 'LIVE' || cachedQuote.dataFreshness === 'EOD';
 
       if (isFresh && isFreshnessValid) {
+        this.inMemoryQuoteCache.set(instrumentId, {
+          quote: cachedQuote,
+          expiresAt: Date.now() + (this.cacheTtlMs - ageMs)
+        });
         return cachedQuote;
       }
     }
@@ -138,12 +164,19 @@ export class MarketDataService {
           provider: this.provider.providerId
         });
 
-        return {
+        const enriched: EnrichedMarketQuote = {
           ...upserted,
           symbol: instrument.symbol,
           displayName: instrument.displayName,
           exchange: instrument.exchange
         };
+
+        this.inMemoryQuoteCache.set(instrumentId, {
+          quote: enriched,
+          expiresAt: Date.now() + this.cacheTtlMs
+        });
+
+        return enriched;
       }
     } catch {
       // Provider error - fallback to stale cache or unavailable status
@@ -187,10 +220,32 @@ export class MarketDataService {
 
   async getBatchQuotes(instrumentIds: string[]): Promise<EnrichedMarketQuote[]> {
     const results: EnrichedMarketQuote[] = [];
+    const missingIds: string[] = [];
+
+    // 1. Check in-memory cache hits
     for (const id of instrumentIds) {
-      const q = await this.getQuote(id);
+      const inMemo = this.inMemoryQuoteCache.get(id);
+      if (
+        inMemo &&
+        Date.now() < inMemo.expiresAt &&
+        (inMemo.quote.dataFreshness === 'LIVE' || inMemo.quote.dataFreshness === 'EOD')
+      ) {
+        results.push(inMemo.quote);
+      } else {
+        missingIds.push(id);
+      }
+    }
+
+    if (missingIds.length === 0) {
+      return results;
+    }
+
+    // 2. Fetch missing entries via getQuote in parallel
+    const fetched = await Promise.all(missingIds.map((id) => this.getQuote(id)));
+    for (const q of fetched) {
       if (q) results.push(q);
     }
+
     return results;
   }
 
