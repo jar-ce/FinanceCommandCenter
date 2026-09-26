@@ -14,11 +14,11 @@ This plan performs a comprehensive audit across 25 production-readiness categori
 
 ## 1. Current Verified Repository State
 
-The current baseline state of the repository has been empirically verified prior to generating this plan:
+The current baseline state of the repository has been empirically verified prior to finalizing this plan:
 
 * **Repository**: `https://github.com/jar-ce/FinanceCommandCenter.git`
 * **Branch**: `main`
-* **Commit Hash**: `18eeacfc3d67ffe5ada2931159d07ade60ac6b9d`
+* **Commit Hash**: `b73af13a29cb4563e2a2d57a55cc6c6264f775da`
 * **Working Tree**: Clean
 * **Vitest Test Baseline**: 36 test files / 291 tests (291 passed, 0 failed, 0 skipped)
   * **API Suite**: 21 test files / 231 passed tests
@@ -29,26 +29,28 @@ The current baseline state of the repository has been empirically verified prior
   * Largest Chunk: `259.98 kB` (`vendor-Cu83t4jb.js`)
   * Total JS Size: `578.11 kB`
   * Total Gzip Size: `152.26 kB`
+  * Phase 19 Gzip Target (`< 145.00 kB`): `NOT ACHIEVED` (Documented performance backlog item)
+  * Phase 19 Gzip Budget (`< 180.00 kB`): `ACHIEVED`
   * Rollup `>500 kB` Warning: `ELIMINATED` (0 warnings)
-* **Database State**: 0 pending migrations, 0 schema changes in Phase 20 planning.
+* **Database State**: `New Phase 20 Migration Files: 0`, `Schema Design Changes: 0`.
 
 ---
 
-## 2. Production Architecture Assumptions
+## 2. Infrastructure Provenance & Architecture Candidates
 
-To maintain strict alignment with existing repository code, Phase 20 makes **zero ungrounded assumptions** regarding cloud vendors, proprietary hosting providers, or unneeded third-party SaaS services:
+To maintain absolute accuracy, Phase 20 explicitly distinguishes between **Repository-Proven Capabilities** and **Planned Infrastructure Candidates**:
 
-1. **Target Monorepo Workspaces**:
-   * `@finance-command-center/api`: Fastify 4.x TypeScript REST API backend.
-   * `@finance-command-center/web`: React 19 + Vite 5 single-page frontend application.
-   * `@finance-command-center/shared-types`: Shared DTOs, domain interfaces, and schema type definitions.
-2. **Database Architecture**:
-   * **Development/Testing Engine**: `@electric-sql/pglite` (WebAssembly C-Postgres engine running locally in node).
-   * **Production Engine**: Standard standalone **PostgreSQL 16+** relational database server with connection pooling (`pg.Pool` / `node-postgres` driver) via `DATABASE_URL`.
-3. **HTTP Server & Security Boundary**:
-   * Node.js 20+ runtime executing Fastify backend on port `4000` (or `PORT` environment variable).
-   * Static assets served via reverse proxy / NGINX / CDN with fallback to single-page application `index.html`.
-   * TLS termination handled at the ingress gateway / reverse proxy level.
+| Resource / System | Repository-Proven | Planned Architecture Candidate | External Infrastructure Requirement | Status / Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Fastify API Server** | **YES** | YES | NO | Implemented in `apps/api/src/app.ts` |
+| **Vite SPA Frontend** | **YES** | YES | NO | Implemented in `apps/web/vite.config.ts` |
+| **PGlite Embedded Database** | **YES** | NO (Dev/Test Only) | NO | Local in-memory Postgres WASM driver |
+| **Standalone PostgreSQL 16+** | NO | **YES** | **YES** | Target production relational database |
+| **Docker / Containers** | NO | **YES** | **YES** | Candidate containerization format |
+| **Ingress / NGINX Proxy** | NO | **YES** | **YES** | Reverse proxy / TLS termination gateway |
+| **CDN / Cloudflare** | NO | **YES** | **YES** | Static frontend asset delivery |
+| **Automated CI/CD** | NO | **YES** | **YES** | `.github/workflows/ci.yml` candidate |
+| **Secrets Vault / KMS** | NO | **YES** | **YES** | External secret management system |
 
 ---
 
@@ -76,381 +78,226 @@ All production environment settings are managed via OS-level environment variabl
 
 ---
 
-## 4. Secret Management
+## 4. Secret Management Protocol
 
-### 4.1 Secret Externalization & Storage
-* Production secrets (`DATABASE_URL`, `JWT_SECRET`) must **NEVER** be committed to version control or saved in raw `.env` files in repository directories.
-* `.gitignore` explicitly blocks `.env`, `.env.local`, `.env.production.local`, preventing accidental secret commits.
-* Production secrets must be injected at container startup or process launch from an encrypted secret store (e.g. HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager, or Kubernetes Secrets).
+### 4.1 Secret Management Terminology & Implementation Status
 
-### 4.2 Startup Secret Validation & Fast-Fail
-* As defined in `apps/api/src/config/env.ts`, when `NODE_ENV === 'production'`, the server verifies `JWT_SECRET` against `DEFAULT_DEV_SECRETS`:
-  * If `JWT_SECRET` matches development fallback keys (`dev-jwt-secret-min-16-characters-long` or `super-secret-jwt-key-change-in-production`), startup immediately aborts with:
-    `FATAL: Default development JWT_SECRET is rejected in production. Provide an explicit secret.`
+To prevent ambiguity, secret management controls are classified according to verified implementation state:
 
----
-
-## 5. Authentication & Authorization
-
-### 5.1 Security Controls Preservation (SEC-01 through SEC-07)
-Production deployment strictly preserves all security rules established in Phase 17:
-
-1. **SEC-01 (HMAC Trust Model & Canonical Identity)**:
-   * Identity is derived exclusively from server-side HMAC principal resolution (`resolveAuthenticatedPrincipal`).
-   * Caller parameters (`x-user-id` header or body parameters) cannot override the verified `userId`.
-2. **SEC-02 (Security Response Headers)**:
-   * Mandatory headers enforced on all HTTP responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy: default-src 'self'`.
-3. **SEC-03 (Environment Guardrail)**: Fast-fail startup when production environment lacks explicit production secrets.
-4. **SEC-04 (Market Master Write Authorization)**: Market instrument creation/updates restricted strictly to Admin/System roles.
-5. **SEC-05 (Client-Side Identity Safety)**: Frontend state stores state without client-side privilege escalation options.
-6. **SEC-06 (CORS Origin Enforcer)**: Origins validated strictly against configured `CORS_ORIGIN`. Unrecognized origins rejected with `403 CORS_NOT_ALLOWED`.
-7. **SEC-07 (IPO Sync Administrative Lock)**: Master IPO synchronization routes guarded by system authorization.
+* **Secret Validation**: `IMPLEMENTED / VERIFIED` (Fast-fail check in `apps/api/src/config/env.ts` rejecting default dev keys when `NODE_ENV === 'production'`).
+* **Secret Externalization**: `PRODUCTION REQUIREMENT` (Storing production secrets in external KMS/Vault outside version control).
+* **Secret Injection**: `PRODUCTION REQUIREMENT` (Runtime container environment variable injection).
+* **Secret Rotation**: `PRODUCTION REQUIREMENT` (Periodic HMAC and database credential rotation procedures).
+* **Secret Revocation**: `PRODUCTION REQUIREMENT` (Emergency key invalidation protocol).
+* **Production Secret Configuration**: `NOT CONFIGURED` (No real production secrets exist in the repository).
 
 ---
 
-## 6. Database Production Strategy
+## 5. Production Authentication & Authorization Lifecycle
 
-### 6.1 PGlite vs Standalone PostgreSQL Driver Transition
-* **Development/Testing**: `@electric-sql/pglite` executes in-memory PostgreSQL WebAssembly compiled C code.
-* **Production**: Requires connecting to a standalone PostgreSQL 16+ database instance.
+### 5.1 Verified Existing Capability vs Production Lifecycle Requirements
+
+Authentication readiness distinguishes between verified request inspection hooks and full operational identity management:
+
+#### Verified Existing Capabilities (In-Code)
+* **SEC-01 (HMAC Trust Model & Canonical Identity)**: Server-side HMAC signature verification (`resolveAuthenticatedPrincipal`). Identity derived strictly from server validation; caller headers (`x-user-id`) cannot override verified `userId`.
+* **SEC-02 (Security Response Headers)**: Mandatory security headers on all HTTP responses (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy: default-src 'self'`).
+* **SEC-04 / SEC-07 (Role-Based Access Control)**: Market master writes and IPO sync endpoints restricted to Admin/System roles.
+* **SEC-06 (CORS Origin Guard)**: Unrecognized origins rejected with `403 CORS_NOT_ALLOWED`.
+
+#### Production Lifecycle Requirements (To Be Implemented)
+* **Credential & Token Issuance Service**: Full endpoint suite for user login, initial credential exchange, and refresh token issuance.
+* **Token Revocation & Blacklisting**: Server-side token invalidation store (e.g., Redis or database table) for logged-out or compromised sessions.
+* **Key Rotation Protocol**: Scheduled and emergency HMAC secret rotation routines without user downtime.
+* **User Onboarding / Offboarding**: Administrative interface for provisioning users and revoking access.
+* **Audit Logging**: Comprehensive logging of authentication failures and privilege escalations.
+
+---
+
+## 6. Database Production Strategy & Migration Terminology
+
+### 6.1 Database Migration Terminology
+* **New Phase 20 Migration Files**: `0`
+* **Production Schema Migration Execution**: `REQUIRED using existing migration set` (0000_initial_schema through 0008_watchlist_schema)
+* **New Schema Changes Introduced by Phase 20 Planning**: `0`
+* **Schema Design Changes**: `0`
+
+Existing migrations (`apps/api/src/db/migrations/`) must be validated and executed against a fresh target production PostgreSQL database as part of deployment.
+
+### 6.2 PostgreSQL Driver Path & Production Driver Dependency
+
+* **Current State**: `@finance-command-center/api` depends on `@electric-sql/pglite` for local development and unit testing.
+* **Production Driver Dependency**: `REQUIRED EXTERNAL PACKAGE / INSTALLATION (pg / @types/pg)`
 * **Implementation Requirement**:
-  * Create a production database driver factory in `apps/api/src/db/index.ts` that checks `process.env.NODE_ENV`:
-    * If `NODE_ENV === 'production'`, instantiate `drizzle-orm/node-postgres` with `pg.Pool` using `DATABASE_URL`, `DATABASE_POOL_SIZE`, and `DATABASE_SSL`.
-    * Otherwise, retain the PGlite instance for local development and test speed.
-
-```
-+-----------------------------------------------------------------------+
-|                         Fastify API Server                            |
-+-----------------------------------------------------------------------+
-                                   |
-                +------------------+------------------+
-                |                                     |
-        NODE_ENV === 'production'             NODE_ENV === 'development'
-                |                                     |
-                v                                     v
-   drizzle-orm/node-postgres                  @electric-sql/pglite
-        (pg.Pool + SSL)                           (In-Memory WASM)
-                |                                     |
-                v                                     v
-   Standalone PostgreSQL 16+                  Local Dev File/Memory DB
-```
-
-### 6.2 Connection Pooling & Resilience
-* **Pool Sizing**: Default pool size of 10 connections per API process (configurable via `DATABASE_POOL_SIZE`).
-* **SSL Enforcement**: Mandatory TLS connection (`DATABASE_SSL=true`) for production database traffic.
-* **Transaction Isolation**: Row-level locking (`FOR UPDATE`) for portfolio sales and Khata reversals preserved under standard PostgreSQL transaction management.
-
----
-
-## 7. Migration Safety & Release Procedures
-
-### 7.1 Drizzle Kit Production Migration Protocol
-Production database schema migrations must be applied using an idempotent pre-deployment runner:
-
-1. **Pre-Migration Safety Gate**:
-   * Automated full database snapshot/backup prior to executing migration scripts.
-   * Lock checking: ensure no long-running schema lock exists.
-2. **Execution Runner**:
-   * Execute `npm run db:migrate` (`apps/api/src/db/migrate.ts`) as a pre-deployment step or initialization job before rolling out new API application instances.
-   * All Drizzle migrations in `apps/api/src/db/migrations/` (0000 through 0008) utilize transactional SQL (`BEGIN ... COMMIT`).
-3. **Rollback Strategy**:
-   * If a migration fails, the transaction automatically rolls back.
-   * For schema breaking changes, forward-compatible two-phase migrations (expand then contract) must be practiced.
-
----
-
-## 8. Backup & Disaster Recovery
-
-### 8.1 PostgreSQL Backup Policy
-* **Automated Daily Backups**: Full `pg_dump` binary backups scheduled daily during low-traffic windows.
-* **Continuous WAL Archiving / Point-In-Time Recovery (PITR)**: Write-Ahead Logs (WAL) archived continuously to secure object storage, enabling recovery to any millisecond within the retention window.
-* **Retention Policy**:
-  * Hourly WAL archives: 7 days.
-  * Daily backups: 30 days.
-  * Monthly backups: 1 year.
-* **Backup Encryption**: Backups encrypted at rest using AES-256 with KMS managed keys.
-
-### 8.2 Recovery Objectives
-* **Recovery Point Objective (RPO)**: `< 5 minutes` (data loss window).
-* **Recovery Time Objective (RTO)**: `< 30 minutes` (service restoration time).
-
----
-
-## 9. Logging & Observability
-
-### 9.1 Structured Pino Logger Configuration
-* Fastify server logging powered by `pino` structured JSON logger (`apps/api/src/infrastructure/logging/logger.ts`).
-* **Path Redaction**: Production logs automatically redact sensitive fields to prevent credential leakage:
+  The `pg` driver package is **not currently installed** in `@finance-command-center/api`. In Phase 20 implementation, `pg` and `@types/pg` must be added to dependencies, and `apps/api/src/db/index.ts` must be refactored to support conditional driver selection:
   ```ts
-  redact: {
-    paths: [
-      'password', 'token', 'secret', 'authorization', 'cookie',
-      'pan', 'panNumber', 'applicationNumber', 'dbPassword'
-    ],
-    censor: '[REDACTED]'
+  if (process.env.NODE_ENV === 'production') {
+    // Instantiate drizzle-orm/node-postgres with pg.Pool using DATABASE_URL
+  } else {
+    // Retain PGlite for local development and test suite execution speed
   }
   ```
-* **Log Destination**: In production, logs output as structured JSON lines to `stdout` for collection by log forwarders (e.g. FluentBit, Datadog, Vector).
 
 ---
 
-## 10. Monitoring & Alerting
+## 7. Backup, Disaster Recovery & RPO/RTO Objectives
 
-### 10.1 Key Performance & Health Metrics
+### 7.1 Recovery Objectives & Evidence Qualification
 
-| Metric Category | Target Threshold | Alerting Trigger | Remediation Action |
+* **Proposed RPO Objective**: `< 5 minutes` (Target data loss window)
+* **Proposed RTO Objective**: `< 30 minutes` (Target service restoration time)
+* **Infrastructure Validation**: `REQUIRED`
+* **Repository Evidence**: `NOT SUFFICIENT TO GUARANTEE TARGET` (Recovery performance depends on selected cloud PostgreSQL infrastructure).
+
+### 7.2 Backup & Disaster Recovery Production Requirements
+* **PostgreSQL Backup Policy**: Daily automated `pg_dump` binary backups.
+* **Continuous WAL Archiving / PITR**: Write-Ahead Log (WAL) archiving to secure object storage for point-in-time recovery.
+* **Backup Encryption & Retention**: Backups encrypted at rest (AES-256) with retention of 7 days (hourly WAL), 30 days (daily), and 1 year (monthly).
+* **Operational Restore Testing**: Semi-annual automated restore validation drills.
+
+---
+
+## 8. Logging, Observability & Proposed Alerting Thresholds
+
+### 8.1 Pino Logger & Security Redaction
+* Structured JSON logging via `pino` (`apps/api/src/infrastructure/logging/logger.ts`).
+* **Path Redaction**: Production logs automatically redact sensitive fields (`password`, `token`, `secret`, `authorization`, `cookie`, `pan`, `panNumber`, `applicationNumber`, `dbPassword`).
+
+### 8.2 Proposed Alerting Thresholds vs Measured Performance
+
+Alerting rules represent **Proposed Alerting Thresholds** for production monitoring, distinguished from Phase 19 measured benchmarks:
+
+| Metric / Endpoint | Phase 19 Measured Benchmark | Proposed Alerting Threshold | Action Trigger |
 | :--- | :--- | :--- | :--- |
-| **API Health Liveness** | 100% | `/api/v1/health` status != 200 | Restart API process instance |
-| **Database Readiness** | 100% | `/api/v1/ready` status != 200 | Check DB pool / connection string |
-| **HTTP 5xx Error Rate** | `< 0.1%` | `> 1.0%` over 5 minutes | Inspect Pino error logs / rollback release |
-| **Dashboard Latency** | `< 35 ms` (p95 `< 50 ms`) | p95 `> 100 ms` for 5 minutes | Check DB query execution / pool exhaustion |
-| **Portfolio P&L Latency** | `< 15 ms` (p95 `< 25 ms`) | p95 `> 50 ms` for 5 minutes | Inspect transaction ledger index usage |
-| **Market Quote Latency** | Warm Cache `< 0.1 ms` | Cache miss spike / Provider timeout | Verify in-memory quote cache status |
+| **HTTP 5xx Error Rate** | `0.0%` (Test Suite) | `> 1.0%` over 5 mins | Trigger PagerAlert / Rollback evaluation |
+| **API Readiness (`/ready`)**| `5.6 ms` | `!= 200 OK` for 2 mins | Alert DB connection failure |
+| **Dashboard Latency** | `4.8 ms` | p95 `> 100 ms` for 5 mins | Alert DB pool / query slowdown |
+| **Portfolio P&L Latency** | `3.2 ms` | p95 `> 50 ms` for 5 mins | Alert transaction ledger index issue |
+| **Reports Latency** | `5.1 ms` | p95 `> 80 ms` for 5 mins | Alert analytics query bottleneck |
+| **Market Quote Cache** | `< 0.1 ms` (Warm Cache) | Cache Miss Ratio `> 40%` | Inspect in-memory quote cache |
 
 ---
 
-## 11. Health & Readiness Protocol
+## 9. Reconciled Required Production Changes & Blocking Gaps
 
-### 11.1 Probe Endpoints
-1. **Liveness Probe (`GET /api/v1/health`)**:
-   * Evaluates Node process health and basic event loop responsiveness.
-   * Returns `200 OK` with `{ status: "ok", timestamp: "..." }`.
-   * Used by orchestrators to determine if process is alive.
-2. **Readiness Probe (`GET /api/v1/ready`)**:
-   * Executes a database connectivity test query (`SELECT 1`).
-   * Returns `200 OK` with `{ status: "ready", database: "connected" }`.
-   * If database query fails, returns `503 Service Unavailable`.
-   * Used by load balancers to route live traffic only to ready instances.
+The 4 required production changes reconcile 1-to-1 with the 4 blocking production gaps:
+
+| ID | Required Production Change | Blocking? | Repository Evidence | Target Implementation Area |
+| :--- | :--- | :--- | :--- | :--- |
+| **REQ-01** | **Standalone PostgreSQL Driver Integration** | **YES** | `pg` package absent from `apps/api/package.json`; PGlite used | `apps/api/src/db/index.ts` & `package.json` |
+| **REQ-02** | **Production Secret Externalization & Injection** | **YES** | No secret injection pipeline; default secrets throw FATAL | Deployment Infrastructure / Secrets Vault |
+| **REQ-03** | **Automated CI/CD Pipeline Workflow** | **YES** | `.github/workflows/` directory absent | `.github/workflows/ci.yml` |
+| **REQ-04** | **Production Auth Lifecycle & Token Management** | **YES** | HMAC hook verified, but issuance/revocation API is incomplete | `apps/api/src/domain/services/AuthService.ts` |
 
 ---
 
-## 12. Error Handling & Information Sanitization
+## 10. Rollback Strategy
 
-### 12.1 Centralized Fastify Error Handler (`errorHandler.ts`)
-* External HTTP responses sanitize internal errors to prevent exposing stack traces, database schema internals, or filesystem paths to clients:
-  * Validation errors (Zod): Returns `400 BAD_REQUEST` with structured issue details.
-  * Internal server errors (500): Logs full stack trace and error message to Pino, but returns clean client response:
-    ```json
-    {
-      "success": false,
-      "error": {
-        "code": "INTERNAL_SERVER_ERROR",
-        "message": "An unexpected server error occurred"
-      },
-      "timestamp": "2026-09-26T12:00:00.000Z"
-    }
-    ```
+### 10.1 Application vs Database Rollback Protocol
 
----
-
-## 13. CORS, Security Headers & Network Security
-
-### 13.1 Production CORS Policy
-* Managed by `@fastify/cors` plugin in `apps/api/src/app.ts`.
-* In production (`NODE_ENV === 'production'`), requests must match `env.CORS_ORIGIN` exactly.
-* Wildcard (`*`) or localhost origins are strictly rejected in production.
-
-### 13.2 Security Headers (SEC-02 Enforcement)
-* Every HTTP response emits:
-  * `X-Content-Type-Options: nosniff`
-  * `X-Frame-Options: DENY`
-  * `Referrer-Policy: strict-origin-when-cross-origin`
-  * `Content-Security-Policy: default-src 'self'`
-
----
-
-## 14. Rate Limiting & Abuse Protection
-
-### 14.1 Production Rate Limiter Setup
-* Backend API protects endpoints using `@fastify/rate-limit`.
-* Default window: 100 requests per 1-minute window per IP address.
-* HTTP 429 (`Too Many Requests`) emitted automatically when client threshold is exceeded.
-
----
-
-## 15. Market Data & IPO Provider Readiness
-
-### 15.1 Market Data Providers & Freshness Tags
-* Market quote infrastructure (`MarketDataService.ts`) supports primary provider lookup with fallback.
-* Quote responses enforce canonical freshness tags:
-  * `LIVE`: Real-time market feed.
-  * `DELAYED`: 15-minute delayed quote data.
-  * `EOD`: End-of-day official closing price.
-  * `STALE`: Outdated quote exceeding freshness threshold.
-  * `UNAVAILABLE`: Provider outage or missing symbol data.
-* **In-Memory Cache (OPT-03)**: Caches quote data in memory to eliminate redundant database/HTTP requests while preserving freshness tags.
-
----
-
-## 16. Frontend Production Build & Asset Delivery
-
-### 16.1 Vite Production Build Metrics
-* **Build Script**: `npm run build --workspace=@finance-command-center/web` (`tsc && vite build`).
-* **Output Artifacts**: Static SPA bundle emitted to `apps/web/dist/`.
-* **Chunk Architecture (OPT-06)**:
-  * `vendor-*.js`: 259.98 kB (gzip: 82.21 kB)
-  * `pages-*.js`: 204.96 kB (gzip: 33.72 kB)
-  * `components-*.js`: 94.98 kB (gzip: 15.33 kB)
-  * `utils-*.js`: 32.21 kB (gzip: 12.97 kB)
-  * `icons-*.js`: 31.16 kB (gzip: 6.85 kB)
-  * `index-*.js`: 3.02 kB (gzip: 1.18 kB)
-* **Rollup >500 kB Warning**: Completely eliminated.
-* **Serving Requirements**: Served via static web server / NGINX / Cloudflare with `Cache-Control: public, max-age=31536000, immutable` for hashed assets, and `no-cache` for `index.html`.
-
----
-
-## 17. CI/CD Pipeline Architecture
-
-### 17.1 Required Automated Quality Gates
-
-Every deployment pull request or main branch merge must pass a automated 5-stage pipeline:
-
-```
-[ Stage 1: Checkout & Setup ] -> [ Stage 2: Type Check ] -> [ Stage 3: Vitest Test Suite ] -> [ Stage 4: Production Build ] -> [ Stage 5: Security & Audit ]
-```
-
-1. **Stage 1 (Setup)**: Node.js 20.x setup, clean `npm ci` install.
-2. **Stage 2 (Type Check)**: `npm run type-check` (zero TypeScript errors).
-3. **Stage 3 (Test Suite)**: `npm run test` (36 Vitest files, 291 tests must pass 100%).
-4. **Stage 4 (Build Gate)**: `npm run build` (Clean compile of shared-types, API, and Web).
-5. **Stage 5 (Security Audit)**: `npm audit --audit-level=high` verification.
-
----
-
-## 18. Dependency Security Audit
-
-### 18.1 Dependency Audit & Vulnerability Assessment
-* Monorepo uses standard NPM dependencies (`pino`, `fastify`, `drizzle-orm`, `react`, `vitest`).
-* Current npm audit shows zero critical or high runtime vulnerabilities in production application code.
-* Dependencies must remain pinned to audited semantic version ranges in `package.json`.
-
----
-
-## 19. Performance Monitoring Backlog
-
-### 19.1 Phase 19 Learning Integration
-* All Phase 19 performance optimizations are verified and preserved:
-  * **OPT-01**: Parallelized multi-portfolio P&L evaluation (`DashboardService.ts`).
-  * **OPT-02**: Database-side deterministic sorting (`PnlService.ts`).
-  * **OPT-03**: In-memory quote cache (`MarketDataService.ts`).
-  * **OPT-04**: Table row subcomponent memoization (`ResizableTable.tsx`).
-  * **OPT-05**: Command palette search memoization (`CommandPalette.tsx`).
-  * **OPT-06**: Manual vendor chunk splitting (`vite.config.ts`).
-* **Performance Backlog Item**: Total Frontend Gzip bundle size is currently `152.26 kB` (below the `180 kB` budget threshold, though above the aggressive `<145 kB` target). Further asset optimization remains queued as an optional future backlog task.
-
----
-
-## 20. Release & Deployment Strategy
-
-### 20.1 Rolling Deployment Procedure
-1. **Pre-Release Gate**: Run CI/CD automated pipeline. Ensure 100% tests pass and working tree is clean.
-2. **Database Migration**: Run `npm run db:migrate` against target production PostgreSQL database.
-3. **App Deployment**: Spin up new API instances with new container/build image.
-4. **Health Check Validation**: Ingress router queries `/api/v1/ready` on new instances.
-5. **Traffic Shift**: Gradual traffic switch to new instances.
-6. **Frontend Static Release**: Upload new hashed SPA bundle to static distribution storage.
-
----
-
-## 21. Rollback Protocol
-
-### 21.1 Emergency Rollback Steps
-* **Application Rollback**: If HTTP 5xx error rates exceed 1% post-release, ingress router immediately reverts traffic to previous stable container release.
+* **Application Rollback**:
+  * Revert traffic router / load balancer to previous immutable container image or build artifact.
+  * Rapid traffic reversal (`< 2 minutes`).
 * **Database Rollback**:
-  * Standard schema additions (new columns/tables) do not break older API versions.
-  * If a migration must be reverted, execute designated down-migration or restore pre-release point-in-time PostgreSQL backup.
+  * **No Automatic Destructive Down-Migrations**: Production deployments must NOT run automatic destructive `DOWN` migrations, as they risk catastrophic data loss.
+  * **Expand / Contract Strategy**: Schema additions must remain backward-compatible with the previous application release.
+  * **Corrective Migrations & PITR**: Irreversible schema errors must be remediated via forward corrective migrations or point-in-time database restoration from verified backups.
 
 ---
 
-## 22. Production Data Safety & Financial Integrity
+## 11. Dependency Security Audit
 
-### 22.1 Financial Audit & Immutable Reversals
-* All financial transactions (Buy/Sell trades, Khata entries) enforce strict numerical precision via `Decimal.js` and `NUMERIC(18,4)` columns.
-* **No Hard Deletes**: Digital Khata entries use immutable reversal entries to preserve full audit trails.
-* **Oversell Lock**: Portfolio position sales execute under database transaction locks (`FOR UPDATE`), preventing position quantities from dropping below zero.
+### 11.1 Empirical `npm audit` Evidence & Risk Classification
 
----
+An empirical `npm audit` execution was performed on the workspace:
 
-## 23. Operational Runbooks
-
-### 23.1 Runbook Index
-
-1. **RB-01: API Startup Failure**:
-   * *Detection*: Process exits immediately with log `FATAL: Default development JWT_SECRET is rejected in production`.
-   * *Action*: Update secret configuration with explicit 32+ character production `JWT_SECRET`.
-2. **RB-02: Database Connection Failure**:
-   * *Detection*: `/api/v1/ready` returns `503 Service Unavailable`.
-   * *Action*: Verify PostgreSQL database server health, verify `DATABASE_URL` credentials and network security group access.
-3. **RB-03: CORS Origin Violation**:
-   * *Detection*: Log warning `CORS_NOT_ALLOWED` for incoming client requests.
-   * *Action*: Verify client domain matches `CORS_ORIGIN` environment variable.
+* **Audit Result**: `12 vulnerabilities found (7 moderate, 4 high, 1 critical)`
+* **Production Runtime Exposure**:
+  * `fastify` `<= 5.12.0` (High): DoS via memory allocation, header tab coercion, and host spoofing advisories.
+  * `drizzle-orm` `< 0.45.2` (High): SQL identifier escaping advisory.
+  * `find-my-way` `<= 9.6.0` (High): HTTP/2 DoS advisory.
+  * *Impact*: High severity advisories exist in core production dependencies (`fastify` 4.28.1 and `drizzle-orm` 0.36.0). Remediation requires major breaking upgrades (`fastify` 5.x and `drizzle-orm` 0.45.x).
+* **Development & Build-Only Exposure**:
+  * `vitest`, `@vitest/mocker`, `vite`, `esbuild`, `drizzle-kit` (Moderate / Critical): Development, testing, and bundler tooling advisories. Zero runtime exposure in production backend or compiled SPA JS assets.
+* **Mitigated Residual Risk**: Application-level input validation (Zod), HMAC identity verification, sanitized SQL parameterized queries, and Pino redaction mitigate runtime exploit vectors.
+* **Unresolved Risk Status**: Vulnerabilities remain unpatched during Phase 20 planning because dependency upgrades are strictly prohibited. Remediating runtime advisories is queued as a post-planning maintenance task.
 
 ---
 
-## 24. Production Readiness Matrix
+## 12. Production Readiness Matrix
 
-| Area | Current State | Production Requirement | Gap | Classification | Priority |
+| Area | Current State | Repository Evidence | Production Requirement | Gap | Readiness Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **API Server Framework** | Fastify 4.x TypeScript | Node 20+ Fastify Service | None | Production Ready | - |
-| **Database Engine** | PGlite (WASM) in Dev | Standalone PostgreSQL 16+ | Connection driver adapter in `db/index.ts` | Required Change | **High** |
-| **Environment Guards** | `env.ts` validate | Explicit production secrets | None | Production Ready | - |
-| **Security Controls** | SEC-01 to SEC-07 | SEC-01 to SEC-07 Enforced | None | Production Ready | - |
-| **Logging** | Pino JSON Logger | Pino JSON to stdout | None | Production Ready | - |
-| **Error Sanitization** | `errorHandler.ts` | Clean client error responses | None | Production Ready | - |
-| **Frontend Bundle** | Vite Split Chunks | Static Asset Server / CDN | None (Largest chunk 259 kB) | Production Ready | - |
-| **CI/CD Quality Gate** | Manual npm scripts | Automated GitHub Action | CI/CD workflow YAML definition | Required Change | **Medium** |
+| **API Framework** | Fastify 4.28.1 | `apps/api/src/app.ts` | Fastify 4.x/5.x Service | None | **Production Ready in Code** |
+| **Database Engine** | PGlite (WASM) | `apps/api/src/db/index.ts` | Standalone PostgreSQL 16+ | Driver `pg` missing | **Requires Implementation** |
+| **Environment Guards**| `env.ts` validation | `apps/api/src/config/env.ts` | Fast-fail secret check | None | **Production Ready in Code** |
+| **Security Headers** | SEC-02 hook | `apps/api/src/app.ts` | Mandatory security headers | None | **Production Ready in Code** |
+| **CORS Policy** | Origin validator | `apps/api/src/app.ts` | Production origin lock | Production domain config | **Requires Configuration** |
+| **Logging** | Pino structured | `logger.ts` | Structured JSON to stdout | None | **Production Ready in Code** |
+| **Error Handling** | `errorHandler.ts` | `errorHandler.ts` | Sanitized 500 responses | None | **Production Ready in Code** |
+| **Frontend Bundle** | Vite manual chunks | `apps/web/vite.config.ts` | Hashed SPA static assets | CDN / NGINX hosting | **Requires External Infrastructure** |
+| **Secret Management**| Fast-fail check | `apps/api/src/config/env.ts` | Vault / KMS externalization | No production secrets | **Requires Configuration** |
+| **Auth Lifecycle** | HMAC request hook | `resolveAuthenticatedPrincipal` | Issuance & revocation API | Token management API | **Requires Implementation** |
+| **CI/CD Pipeline** | None | No `.github/` folder | Automated Quality Gate | Workflow definition | **Requires Implementation** |
+| **Database Backups** | None | Local PGlite memory | Daily backups + PITR | Backup infrastructure | **Requires Operational Process** |
 
 ---
 
-## 25. File-by-File Implementation Plan
+## 13. File-by-File Implementation Plan
 
-*Note: The following changes are planned for future authorization. NO code changes are made during this planning stage.*
+*Note: The following changes are planned for future authorization. NO code modifications are performed during this planning stage.*
 
-### 25.1 `apps/api/src/db/index.ts`
-* **Current Behavior**: Initializes `@electric-sql/pglite` database client unconditionally.
-* **Planned Modification**: Add environment branch:
+### 13.1 `apps/api/package.json`
+* **Current Behavior**: Contains `@electric-sql/pglite` dependency; lacks `pg` and `@types/pg`.
+* **Planned Modification**: Add `pg^8.13.0` and `@types/pg^8.11.0` to dependencies.
+* **Reason**: Required driver for standalone PostgreSQL database connectivity.
+
+### 13.2 `apps/api/src/db/index.ts`
+* **Current Behavior**: Initializes `@electric-sql/pglite` client unconditionally.
+* **Planned Modification**: Refactor `getDb()` to check `env.NODE_ENV`:
   ```ts
   if (env.NODE_ENV === 'production') {
-    // Instantiate drizzle-orm/node-postgres pg.Pool using env.DATABASE_URL
+    // Connect to PostgreSQL via drizzle-orm/node-postgres pg.Pool
   } else {
-    // Retain PGlite for local development and test execution speed
+    // Retain PGlite for local development and fast unit test execution
   }
   ```
-* **Reason**: Production requires standalone PostgreSQL database server connectivity.
-* **Impact**: Zero breaking changes to domain services or test suites.
+* **Reason**: Enables seamless transition between dev PGlite and production PostgreSQL.
 
-### 25.2 `.github/workflows/ci.yml` (New File Candidate)
-* **Current Behavior**: No CI workflow file currently exists in repository.
-* **Planned Modification**: Create GitHub Actions CI workflow executing `npm ci`, `npm run type-check`, `npm run test`, and `npm run build`.
-* **Reason**: Automate production quality gates on every pull request.
-
----
-
-## 26. Database Gate
-
-```
-Tables Added: 0
-Migrations Added: 0
-Schema Modified: NO
-```
-Phase 20 planning requires **ZERO** database schema changes or migration files.
+### 13.3 `.github/workflows/ci.yml` (New File Candidate)
+* **Current Behavior**: No CI workflow file exists.
+* **Planned Modification**: Create GitHub Actions CI workflow running `npm ci`, `npm run type-check`, `npm run test`, and `npm run build`.
+* **Reason**: Enforce automated quality gates on all pull requests.
 
 ---
 
-## 27. Phase Boundaries & Exclusions
+## 14. Database Gate
 
-### Strict Exclusions from Phase 20 Planning:
-* ❌ NO immediate deployment or infrastructure provisioning during planning.
-* ❌ NO committing of real production secrets, API keys, or certificates.
-* ❌ NO database schema modifications or migration file generation.
-* ❌ NO dependency upgrades or new NPM package installations.
+```
+New Tables: 0
+New Migrations: 0
+Schema Changes: 0
+```
+Phase 20 planning introduces **ZERO** database schema changes or migration files.
+
+---
+
+## 15. Strict Exclusions
+
+### Exclusions from Phase 20 Planning:
+* ❌ NO Phase 20 implementation execution or code modifications.
+* ❌ NO infrastructure provisioning or deployment.
+* ❌ NO real production secret configuration or key generation.
+* ❌ NO database schema changes or migration file creation.
+* ❌ NO package dependency upgrades or new package installations.
+* ❌ NO creation of CI/CD workflow files during planning.
 * ❌ NO modification to financial logic, Decimal.js calculations, or P&L formulas.
-* ❌ NO alteration to Fastify REST API response contracts or endpoint routes.
+* ❌ NO changes to Fastify REST API response contracts or endpoint routes.
 * ❌ NO redesign of the APEX OS user interface or CSS architecture.
 
 ---
 
-## 28. Approval Gate
+## 16. Approval Gate
 
 ```
 PHASE 20 — PRODUCTION PREPARATION PLAN
@@ -474,16 +321,19 @@ Production Readiness Areas Audited:
 25
 
 Blocking Production Gaps:
-3 (Standalone PostgreSQL driver adapter required for production connection; HMAC secret externalization & production key injection; Production CI/CD workflow definition)
+4 (REQ-01: PostgreSQL driver missing; REQ-02: Production secret injection missing; REQ-03: CI/CD pipeline missing; REQ-04: Auth token management API incomplete)
 
 Required Production Changes:
 4
 
 External Infrastructure Dependencies:
-4 (PostgreSQL 16+ Database, TLS/Reverse Proxy / Load Balancer, Secrets Vault / KMS, CI/CD Runner / Container Registry)
+4 (Standalone PostgreSQL 16+ DB, Ingress Router / Reverse Proxy / TLS, Secrets Vault / KMS, CI/CD Runner / Container Registry)
 
-Database Migration Required:
-NO
+New Phase 20 Migration Files:
+0
+
+Production Migration Execution:
+REQUIRED using existing migration set
 
 Financial Logic Changes:
 0
@@ -505,6 +355,12 @@ NOT PROVISIONED
 
 Production Secrets:
 NOT CONFIGURED
+
+CI/CD:
+NOT IMPLEMENTED
+
+Dependency Security:
+12 vulnerabilities found (7 moderate, 4 high, 1 critical; unresolved residual risk in Fastify 4.x and Drizzle-ORM 0.36.x)
 
 Phase 20 Implementation:
 NOT STARTED
