@@ -18,7 +18,7 @@ The current baseline state of the repository has been empirically verified prior
 
 * **Repository**: `https://github.com/jar-ce/FinanceCommandCenter.git`
 * **Branch**: `main`
-* **Commit Hash**: `3c494b9b319cac26981cd6f15b5b06b7a56c75c8`
+* **Commit Hash**: `26e01fb12e8315c2045f022d8abdecbaa38979a5`
 * **Working Tree**: Clean
 * **Vitest Test Baseline**: 36 test files / 291 tests (291 passed, 0 failed, 0 skipped)
   * **API Suite**: 21 test files / 231 passed tests
@@ -117,11 +117,18 @@ To prevent ambiguity, secret management controls are classified according to ver
 ### 5.2 Planned Auth Lifecycle & API Contract Impact
 * **Current API Scope**: Existing Fastify routes handle resource operations assuming pre-authenticated principal resolution.
 * **Planned Auth Lifecycle Capabilities**: Full endpoint suite for user login, initial credential exchange, access/refresh token issuance, token revocation, key rotation protocols, and administrative user onboarding/offboarding.
-* **API Contract Impact**: `EXPECTED — AUTHENTICATION LIFECYCLE ENDPOINTS REQUIRE API ADDITIONS`. Adding these lifecycle endpoints will expand the Fastify API contract and require formal security reviews and regression test additions.
+* **API Contract Impact**: `EXPECTED — AUTHENTICATION LIFECYCLE ENDPOINTS REQUIRE API ADDITIONS`. Future implementation of login, credential exchange, access token issuance, refresh, revocation, and onboarding/offboarding will introduce new API endpoints and require dedicated security review and regression test additions.
 
-### 5.3 Token Revocation Storage Design
-* **Token Revocation Store**: `EXTERNAL STATE STORE CANDIDATE` (e.g. Redis or in-memory state store for invalidating logged-out tokens).
-* **Database Revocation Table**: `NOT AUTHORIZED UNDER CURRENT ZERO-MIGRATION PLAN`. If a database table is proposed for revocation state in the future, it requires separate schema/migration authorization.
+### 5.3 Token Revocation Storage Architecture
+* **Production Token Revocation Store**: `SHARED EXTERNAL STATE STORE REQUIRED`
+* **Preferred Candidate**: Redis or equivalent shared low-latency state store.
+* **Local In-Memory Store**: `DEVELOPMENT / TEST ONLY`
+* **Architectural Rationale**:
+  * All API instances in a multi-instance deployment must observe token revocations consistently.
+  * Logout and session compromise invalidations must propagate across all running API instances immediately.
+  * Process restarts or autoscaling events must not silently restore revoked production sessions.
+  * Revocation state must not depend on an individual API process's memory space.
+* **Database Revocation Table**: `NOT AUTHORIZED UNDER CURRENT ZERO-MIGRATION PLAN`. If a database-backed revocation table is considered in the future, it requires separate schema and migration authorization.
 
 ---
 
@@ -331,13 +338,28 @@ Production Readiness Areas Audited:
 25
 
 Blocking Production Gaps:
-5 (REQ-01: PostgreSQL driver missing; REQ-02: Production secret injection missing; REQ-03: CI/CD pipeline missing; REQ-04: Auth token management API incomplete; REQ-05: Unresolved high/critical dependency vulnerabilities)
+5
+
+REQ-01:
+Standalone PostgreSQL driver
+
+REQ-02:
+Production secret externalization/injection
+
+REQ-03:
+Automated CI/CD
+
+REQ-04:
+Production authentication lifecycle
+
+REQ-05:
+Dependency security remediation or formal risk acceptance
 
 Required Production Changes:
 5
 
 External Infrastructure Dependencies:
-4 (Standalone PostgreSQL 16+ DB, Ingress Router / Reverse Proxy / TLS, Secrets Vault / KMS, CI/CD Runner / Container Registry)
+4
 
 New Phase 20 Migration Files:
 0
@@ -349,16 +371,17 @@ Financial Logic Changes:
 0
 
 API Contract Changes:
-EXPECTED FOR AUTH LIFECYCLE / OTHERWISE 0
+EXPECTED FOR AUTH LIFECYCLE
 
 Security Behavior Changes:
-CURRENT: Request HMAC & RBAC verification | PLANNED: Full token issuance & revocation lifecycle
+CURRENT VERIFIED CONTROLS + PLANNED AUTH LIFECYCLE
 
 UI Redesign:
 0
 
 Dependency Security:
-12 vulnerabilities found (7 moderate, 4 high, 1 critical)
+12 vulnerabilities found
+7 moderate / 4 high / 1 critical
 
 Dependency Production Gate:
 BLOCKED — REMEDIATION OR FORMAL RISK ACCEPTANCE REQUIRED
