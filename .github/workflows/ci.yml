@@ -1,0 +1,37 @@
+name: Finance Command Center APEX OS CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build, Test & Security Audit Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: TypeScript Static Type-Check Gate
+        run: npm run type-check
+
+      - name: Execute Vitest Automated Test Suite
+        run: npm run test
+
+      - name: Compile Production Build Artifacts
+        run: npm run build
+
+      - name: Dependency Security Audit Gate
+        run: npm audit --audit-level=high

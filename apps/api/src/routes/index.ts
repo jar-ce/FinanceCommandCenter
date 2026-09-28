@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { healthRoutes } from './health.js';
+import { authRoutes } from './auth.js';
 import { khataRoutes } from './khata.js';
 import { ipoRoutes } from './ipo.js';
 import { ipoApplicationsRoutes } from './ipo-applications.js';
@@ -15,6 +16,7 @@ import { reportRoutes } from './reports.js';
 
 export const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance): Promise<void> => {
   await fastify.register(healthRoutes);
+  await fastify.register(authRoutes, { prefix: '/auth' });
   await fastify.register(khataRoutes, { prefix: '/khata' });
   await fastify.register(ipoRoutes, { prefix: '/ipo' });
   await fastify.register(ipoApplicationsRoutes, { prefix: '/ipo/applications' });
@@ -28,6 +30,7 @@ export const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance): P
   await fastify.register(dashboardRoutes, { prefix: '/dashboard' });
   await fastify.register(reportRoutes, { prefix: '/reports' });
 };
+
 
 
 
