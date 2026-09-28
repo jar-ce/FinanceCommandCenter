@@ -18,13 +18,20 @@ The current baseline state of the repository has been empirically verified prior
 
 * **Repository**: `https://github.com/jar-ce/FinanceCommandCenter.git`
 * **Branch**: `main`
-* **Commit Hash**: `b73af13a29cb4563e2a2d57a55cc6c6264f775da`
+* **Commit Hash**: `3c494b9b319cac26981cd6f15b5b06b7a56c75c8`
 * **Working Tree**: Clean
 * **Vitest Test Baseline**: 36 test files / 291 tests (291 passed, 0 failed, 0 skipped)
   * **API Suite**: 21 test files / 231 passed tests
   * **Web Suite**: 15 test files / 60 passed tests
 * **TypeScript Type-Check**: `PASSED` (`tsc -b packages/shared-types && tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json`)
 * **Production Build**: `PASSED` (`tsc -b` and `vite build`)
+* **Verified Frontend Package Versions** (`apps/web/package.json`):
+  * `react`: `^19.0.0`
+  * `react-dom`: `^19.0.0`
+  * `react-router-dom`: `^7.18.3`
+  * `lucide-react`: `^1.46.0`
+  * `vite`: `^5.4.10`
+  * `vitest`: `^2.1.9`
 * **Frontend Bundle State**:
   * Largest Chunk: `259.98 kB` (`vendor-Cu83t4jb.js`)
   * Total JS Size: `578.11 kB`
@@ -32,25 +39,31 @@ The current baseline state of the repository has been empirically verified prior
   * Phase 19 Gzip Target (`< 145.00 kB`): `NOT ACHIEVED` (Documented performance backlog item)
   * Phase 19 Gzip Budget (`< 180.00 kB`): `ACHIEVED`
   * Rollup `>500 kB` Warning: `ELIMINATED` (0 warnings)
-* **Database State**: `New Phase 20 Migration Files: 0`, `Schema Design Changes: 0`.
+* **Database State**: `New Phase 20 Migration Files: 0`, `New Phase 20 Schema Design: 0`.
 
 ---
 
-## 2. Infrastructure Provenance & Architecture Candidates
+## 2. Infrastructure Architecture & Capability Classification
 
-To maintain absolute accuracy, Phase 20 explicitly distinguishes between **Repository-Proven Capabilities** and **Planned Infrastructure Candidates**:
+To maintain provider-neutral accuracy, Phase 20 explicitly classifies mandatory capabilities versus deployment-model candidates:
 
-| Resource / System | Repository-Proven | Planned Architecture Candidate | External Infrastructure Requirement | Status / Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Fastify API Server** | **YES** | YES | NO | Implemented in `apps/api/src/app.ts` |
-| **Vite SPA Frontend** | **YES** | YES | NO | Implemented in `apps/web/vite.config.ts` |
-| **PGlite Embedded Database** | **YES** | NO (Dev/Test Only) | NO | Local in-memory Postgres WASM driver |
-| **Standalone PostgreSQL 16+** | NO | **YES** | **YES** | Target production relational database |
-| **Docker / Containers** | NO | **YES** | **YES** | Candidate containerization format |
-| **Ingress / NGINX Proxy** | NO | **YES** | **YES** | Reverse proxy / TLS termination gateway |
-| **CDN / Cloudflare** | NO | **YES** | **YES** | Static frontend asset delivery |
-| **Automated CI/CD** | NO | **YES** | **YES** | `.github/workflows/ci.yml` candidate |
-| **Secrets Vault / KMS** | NO | **YES** | **YES** | External secret management system |
+### 2.1 Mandatory Production Capabilities
+* **Standalone PostgreSQL 16+ Database**: Relational datastore replacing in-memory dev PGlite.
+* **TLS-Protected Network Path**: Encrypted HTTPS/TLS transport for all API and web traffic.
+* **External Production Secret Management**: Secret store injection outside source code.
+* **Automated Release Quality Gates**: Automated CI/CD execution of type-check, tests, and build.
+* **Backup & PITR Capability**: Daily PostgreSQL backups and Write-Ahead Log archiving.
+* **Monitoring & Log Collection**: Structured log aggregation and uptime/latency alerting.
+
+### 2.2 Deployment-Model Candidates (Provider Neutral)
+
+| Architecture Candidate | Repository-Proven | Mandatory vs Candidate | Notes |
+| :--- | :--- | :--- | :--- |
+| **Docker Containerization** | NO | Deployment-Model Candidate | Container runtime option |
+| **Ingress Router / NGINX** | NO | Deployment-Model Candidate | Reverse proxy / TLS termination |
+| **CDN / Static Web Host** | NO | Deployment-Model Candidate | Static frontend SPA distribution |
+| **Kubernetes / Orchestration** | NO | Deployment-Model Candidate | Multi-instance orchestration option |
+| **Container Registry** | NO | Deployment-Model Candidate | Required ONLY IF container deployment is selected |
 
 ---
 
@@ -73,8 +86,6 @@ All production environment settings are managed via OS-level environment variabl
 | `REFRESH_TOKEN_EXPIRES_IN` | String | Config | NO | `7d` | Refresh token lifespan. |
 | `CORS_ORIGIN` | String | Config | **YES** | *None* | Allowed production origin (e.g. `https://finance.domain.com`). |
 | `LOG_LEVEL` | String | Config | NO | `info` | Structured log level (`info`, `warn`, `error`). |
-| `NSE_API_BASE_URL` | String | Config | NO | `https://www.nseindia.com/api` | Base URL for live market quote integration. |
-| `YAHOO_FINANCE_API_URL` | String | Config | NO | `https://query1.finance.yahoo.com` | Fallback market data provider URL. |
 
 ---
 
@@ -93,50 +104,44 @@ To prevent ambiguity, secret management controls are classified according to ver
 
 ---
 
-## 5. Production Authentication & Authorization Lifecycle
+## 5. Production Authentication Lifecycle & API Contract Reconciliations
 
-### 5.1 Verified Existing Capability vs Production Lifecycle Requirements
+### 5.1 Verified Existing Capabilities vs Planned Auth Lifecycle
 
-Authentication readiness distinguishes between verified request inspection hooks and full operational identity management:
+* **Code-Level Security Controls**: `VERIFIED`
+  * SEC-01 (HMAC signature verification & canonical principal resolution in `resolveAuthenticatedPrincipal`). Identity derived strictly from server validation; caller headers (`x-user-id`) cannot override verified `userId`.
+  * SEC-02 (Security Response Headers): Mandatory response headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Content-Security-Policy`).
+  * SEC-04 / SEC-07 (Role-Based Access Control): Market master writes and IPO sync endpoints restricted to Admin/System roles.
+  * SEC-06 (CORS Origin Guard): Unrecognized origins rejected with `403 CORS_NOT_ALLOWED`.
 
-#### Verified Existing Capabilities (In-Code)
-* **SEC-01 (HMAC Trust Model & Canonical Identity)**: Server-side HMAC signature verification (`resolveAuthenticatedPrincipal`). Identity derived strictly from server validation; caller headers (`x-user-id`) cannot override verified `userId`.
-* **SEC-02 (Security Response Headers)**: Mandatory security headers on all HTTP responses (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy: default-src 'self'`).
-* **SEC-04 / SEC-07 (Role-Based Access Control)**: Market master writes and IPO sync endpoints restricted to Admin/System roles.
-* **SEC-06 (CORS Origin Guard)**: Unrecognized origins rejected with `403 CORS_NOT_ALLOWED`.
+### 5.2 Planned Auth Lifecycle & API Contract Impact
+* **Current API Scope**: Existing Fastify routes handle resource operations assuming pre-authenticated principal resolution.
+* **Planned Auth Lifecycle Capabilities**: Full endpoint suite for user login, initial credential exchange, access/refresh token issuance, token revocation, key rotation protocols, and administrative user onboarding/offboarding.
+* **API Contract Impact**: `EXPECTED — AUTHENTICATION LIFECYCLE ENDPOINTS REQUIRE API ADDITIONS`. Adding these lifecycle endpoints will expand the Fastify API contract and require formal security reviews and regression test additions.
 
-#### Production Lifecycle Requirements (To Be Implemented)
-* **Credential & Token Issuance Service**: Full endpoint suite for user login, initial credential exchange, and refresh token issuance.
-* **Token Revocation & Blacklisting**: Server-side token invalidation store (e.g., Redis or database table) for logged-out or compromised sessions.
-* **Key Rotation Protocol**: Scheduled and emergency HMAC secret rotation routines without user downtime.
-* **User Onboarding / Offboarding**: Administrative interface for provisioning users and revoking access.
-* **Audit Logging**: Comprehensive logging of authentication failures and privilege escalations.
+### 5.3 Token Revocation Storage Design
+* **Token Revocation Store**: `EXTERNAL STATE STORE CANDIDATE` (e.g. Redis or in-memory state store for invalidating logged-out tokens).
+* **Database Revocation Table**: `NOT AUTHORIZED UNDER CURRENT ZERO-MIGRATION PLAN`. If a database table is proposed for revocation state in the future, it requires separate schema/migration authorization.
 
 ---
 
-## 6. Database Production Strategy & Migration Terminology
+## 6. Database Production Strategy, Driver & Migration Gate
 
-### 6.1 Database Migration Terminology
+### 6.1 Database Migration Gate & Terminology
 * **New Phase 20 Migration Files**: `0`
+* **New Phase 20 Schema Design**: `0`
 * **Production Schema Migration Execution**: `REQUIRED using existing migration set` (0000_initial_schema through 0008_watchlist_schema)
-* **New Schema Changes Introduced by Phase 20 Planning**: `0`
-* **Schema Design Changes**: `0`
 
-Existing migrations (`apps/api/src/db/migrations/`) must be validated and executed against a fresh target production PostgreSQL database as part of deployment.
+Existing migrations (`apps/api/src/db/migrations/`) must be validated and executed against a fresh target production PostgreSQL database during deployment.
 
-### 6.2 PostgreSQL Driver Path & Production Driver Dependency
+### 6.2 PostgreSQL Driver Status & Authorized Implementation Change
 
-* **Current State**: `@finance-command-center/api` depends on `@electric-sql/pglite` for local development and unit testing.
-* **Production Driver Dependency**: `REQUIRED EXTERNAL PACKAGE / INSTALLATION (pg / @types/pg)`
-* **Implementation Requirement**:
-  The `pg` driver package is **not currently installed** in `@finance-command-center/api`. In Phase 20 implementation, `pg` and `@types/pg` must be added to dependencies, and `apps/api/src/db/index.ts` must be refactored to support conditional driver selection:
-  ```ts
-  if (process.env.NODE_ENV === 'production') {
-    // Instantiate drizzle-orm/node-postgres with pg.Pool using DATABASE_URL
-  } else {
-    // Retain PGlite for local development and test suite execution speed
-  }
-  ```
+* **pg**: `NOT CURRENTLY INSTALLED`
+* **@types/pg**: `NOT CURRENTLY INSTALLED`
+* **Production PostgreSQL Driver**: `REQUIRED IMPLEMENTATION CHANGE`
+* **Planning vs Implementation Rule**:
+  * **Phase 20 PLANNING**: No dependency installation is performed.
+  * **Phase 20 IMPLEMENTATION**: Installing `pg` and `@types/pg` in `@finance-command-center/api` is an authorized implementation dependency. Refactoring `apps/api/src/db/index.ts` to conditionally use `drizzle-orm/node-postgres` with `pg.Pool` when `NODE_ENV === 'production'` is a required implementation task.
 
 ---
 
@@ -147,23 +152,17 @@ Existing migrations (`apps/api/src/db/migrations/`) must be validated and execut
 * **Proposed RPO Objective**: `< 5 minutes` (Target data loss window)
 * **Proposed RTO Objective**: `< 30 minutes` (Target service restoration time)
 * **Infrastructure Validation**: `REQUIRED`
-* **Repository Evidence**: `NOT SUFFICIENT TO GUARANTEE TARGET` (Recovery performance depends on selected cloud PostgreSQL infrastructure).
+* **Repository Evidence**: `NOT SUFFICIENT TO GUARANTEE TARGET` (Recovery performance depends on selected production PostgreSQL infrastructure).
 
 ### 7.2 Backup & Disaster Recovery Production Requirements
 * **PostgreSQL Backup Policy**: Daily automated `pg_dump` binary backups.
-* **Continuous WAL Archiving / PITR**: Write-Ahead Log (WAL) archiving to secure object storage for point-in-time recovery.
+* **Continuous WAL Archiving / PITR**: Write-Ahead Log (WAL) archiving for point-in-time recovery.
 * **Backup Encryption & Retention**: Backups encrypted at rest (AES-256) with retention of 7 days (hourly WAL), 30 days (daily), and 1 year (monthly).
 * **Operational Restore Testing**: Semi-annual automated restore validation drills.
 
 ---
 
-## 8. Logging, Observability & Proposed Alerting Thresholds
-
-### 8.1 Pino Logger & Security Redaction
-* Structured JSON logging via `pino` (`apps/api/src/infrastructure/logging/logger.ts`).
-* **Path Redaction**: Production logs automatically redact sensitive fields (`password`, `token`, `secret`, `authorization`, `cookie`, `pan`, `panNumber`, `applicationNumber`, `dbPassword`).
-
-### 8.2 Proposed Alerting Thresholds vs Measured Performance
+## 8. Proposed Alerting Thresholds vs Measured Performance
 
 Alerting rules represent **Proposed Alerting Thresholds** for production monitoring, distinguished from Phase 19 measured benchmarks:
 
@@ -178,16 +177,30 @@ Alerting rules represent **Proposed Alerting Thresholds** for production monitor
 
 ---
 
-## 9. Reconciled Required Production Changes & Blocking Gaps
+## 9. Dependency Security Audit & Production Release Gate
 
-The 4 required production changes reconcile 1-to-1 with the 4 blocking production gaps:
+### 9.1 Empirical `npm audit` Evidence & Production Gate Status
 
-| ID | Required Production Change | Blocking? | Repository Evidence | Target Implementation Area |
-| :--- | :--- | :--- | :--- | :--- |
-| **REQ-01** | **Standalone PostgreSQL Driver Integration** | **YES** | `pg` package absent from `apps/api/package.json`; PGlite used | `apps/api/src/db/index.ts` & `package.json` |
-| **REQ-02** | **Production Secret Externalization & Injection** | **YES** | No secret injection pipeline; default secrets throw FATAL | Deployment Infrastructure / Secrets Vault |
-| **REQ-03** | **Automated CI/CD Pipeline Workflow** | **YES** | `.github/workflows/` directory absent | `.github/workflows/ci.yml` |
-| **REQ-04** | **Production Auth Lifecycle & Token Management** | **YES** | HMAC hook verified, but issuance/revocation API is incomplete | `apps/api/src/domain/services/AuthService.ts` |
+An empirical `npm audit` execution was performed on the workspace:
+
+* **Audit Result**: `12 vulnerabilities found (7 moderate, 4 high, 1 critical)`
+* **Production Runtime Exposure**:
+  * `fastify` `<= 5.12.0` (High): DoS via memory allocation, header tab coercion, and host spoofing advisories.
+  * `drizzle-orm` `< 0.45.2` (High): SQL identifier escaping advisory.
+  * `find-my-way` `<= 9.6.0` (High): HTTP/2 DoS advisory.
+  * *Impact*: High severity advisories exist in core production runtime dependencies (`fastify` 4.28.1 and `drizzle-orm` 0.36.0). Remediation requires major breaking upgrades (`fastify` 5.x and `drizzle-orm` 0.45.x).
+* **Development & Build-Only Exposure**:
+  * `vitest`, `@vitest/mocker`, `vite`, `esbuild`, `drizzle-kit` (Moderate / Critical): Development and build tooling advisories with zero runtime exposure in compiled SPA JS assets.
+* **Mitigated Residual Risk Context**: Application-level input validation (Zod), HMAC identity verification, sanitized SQL parameterized queries, and Pino redaction reduce runtime exploit vectors, but do NOT eliminate underlying dependency advisories.
+* **Dependency Production Gate**: `BLOCKED — REMEDIATION OR FORMAL RISK ACCEPTANCE REQUIRED`
+* **Production Release Eligibility**: `BLOCKED UNTIL DEPENDENCY RISK IS RESOLVED OR FORMALLY ACCEPTED`
+
+### 9.2 CI Security Gate Behavior
+* **Current npm Audit Gate**: `EXPECTED TO FAIL AT --audit-level=high`
+* **Production CI Policy**:
+  * *Option A*: Dependency remediation (upgrading Fastify and Drizzle ORM) occurs before production release.
+  * *Option B*: Formal security risk acceptance is documented before overriding the CI security gate.
+  * *Rule*: CI will NOT silently ignore advisories or lower audit levels to pass. Dependency upgrades remain strictly prohibited during Phase 20 planning.
 
 ---
 
@@ -205,41 +218,36 @@ The 4 required production changes reconcile 1-to-1 with the 4 blocking productio
 
 ---
 
-## 11. Dependency Security Audit
+## 11. Production Readiness Matrix
 
-### 11.1 Empirical `npm audit` Evidence & Risk Classification
-
-An empirical `npm audit` execution was performed on the workspace:
-
-* **Audit Result**: `12 vulnerabilities found (7 moderate, 4 high, 1 critical)`
-* **Production Runtime Exposure**:
-  * `fastify` `<= 5.12.0` (High): DoS via memory allocation, header tab coercion, and host spoofing advisories.
-  * `drizzle-orm` `< 0.45.2` (High): SQL identifier escaping advisory.
-  * `find-my-way` `<= 9.6.0` (High): HTTP/2 DoS advisory.
-  * *Impact*: High severity advisories exist in core production dependencies (`fastify` 4.28.1 and `drizzle-orm` 0.36.0). Remediation requires major breaking upgrades (`fastify` 5.x and `drizzle-orm` 0.45.x).
-* **Development & Build-Only Exposure**:
-  * `vitest`, `@vitest/mocker`, `vite`, `esbuild`, `drizzle-kit` (Moderate / Critical): Development, testing, and bundler tooling advisories. Zero runtime exposure in production backend or compiled SPA JS assets.
-* **Mitigated Residual Risk**: Application-level input validation (Zod), HMAC identity verification, sanitized SQL parameterized queries, and Pino redaction mitigate runtime exploit vectors.
-* **Unresolved Risk Status**: Vulnerabilities remain unpatched during Phase 20 planning because dependency upgrades are strictly prohibited. Remediating runtime advisories is queued as a post-planning maintenance task.
+| Area | Current State | Repository Evidence | Production Requirement | Readiness Classification |
+| :--- | :--- | :--- | :--- | :--- |
+| **Fastify Runtime** | Fastify 4.28.1 | `apps/api/src/app.ts` | High vulnerabilities resolved | **Requires Security Gate** |
+| **Database Engine** | PGlite (WASM) | `apps/api/src/db/index.ts` | Standalone PostgreSQL 16+ | **Requires Implementation** |
+| **Environment Guards**| `env.ts` validation | `apps/api/src/config/env.ts` | Fast-fail secret check | **Production Ready in Code** |
+| **Security Headers** | SEC-02 hook | `apps/api/src/app.ts` | Mandatory security headers | **Production Ready in Code** |
+| **CORS Policy** | Origin validator | `apps/api/src/app.ts` | Production origin lock | **Requires Configuration** |
+| **Logging** | Pino structured | `logger.ts` | Structured JSON to stdout | **Production Ready in Code** |
+| **Error Handling** | `errorHandler.ts` | `errorHandler.ts` | Sanitized 500 responses | **Production Ready in Code** |
+| **Frontend Bundle** | Vite manual chunks | `apps/web/vite.config.ts` | Hashed SPA static assets | **Requires External Infrastructure** |
+| **Secret Management**| Fast-fail check | `apps/api/src/config/env.ts` | Vault / KMS externalization | **Requires Configuration** |
+| **Auth Lifecycle** | HMAC request hook | `resolveAuthenticatedPrincipal` | Issuance & revocation API | **Requires Implementation** |
+| **Dependency Security**| 12 advisories | `npm audit` report | Remediation or risk acceptance | **BLOCKED** |
+| **CI/CD Pipeline** | None | No `.github/` folder | Automated Quality Gate | **Requires Implementation** |
 
 ---
 
-## 12. Production Readiness Matrix
+## 12. Reconciled Required Changes & Blocking Production Gaps
 
-| Area | Current State | Repository Evidence | Production Requirement | Gap | Readiness Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **API Framework** | Fastify 4.28.1 | `apps/api/src/app.ts` | Fastify 4.x/5.x Service | None | **Production Ready in Code** |
-| **Database Engine** | PGlite (WASM) | `apps/api/src/db/index.ts` | Standalone PostgreSQL 16+ | Driver `pg` missing | **Requires Implementation** |
-| **Environment Guards**| `env.ts` validation | `apps/api/src/config/env.ts` | Fast-fail secret check | None | **Production Ready in Code** |
-| **Security Headers** | SEC-02 hook | `apps/api/src/app.ts` | Mandatory security headers | None | **Production Ready in Code** |
-| **CORS Policy** | Origin validator | `apps/api/src/app.ts` | Production origin lock | Production domain config | **Requires Configuration** |
-| **Logging** | Pino structured | `logger.ts` | Structured JSON to stdout | None | **Production Ready in Code** |
-| **Error Handling** | `errorHandler.ts` | `errorHandler.ts` | Sanitized 500 responses | None | **Production Ready in Code** |
-| **Frontend Bundle** | Vite manual chunks | `apps/web/vite.config.ts` | Hashed SPA static assets | CDN / NGINX hosting | **Requires External Infrastructure** |
-| **Secret Management**| Fast-fail check | `apps/api/src/config/env.ts` | Vault / KMS externalization | No production secrets | **Requires Configuration** |
-| **Auth Lifecycle** | HMAC request hook | `resolveAuthenticatedPrincipal` | Issuance & revocation API | Token management API | **Requires Implementation** |
-| **CI/CD Pipeline** | None | No `.github/` folder | Automated Quality Gate | Workflow definition | **Requires Implementation** |
-| **Database Backups** | None | Local PGlite memory | Daily backups + PITR | Backup infrastructure | **Requires Operational Process** |
+The 5 required production changes reconcile 1-to-1 with the 5 blocking production gaps:
+
+| ID | Required Production Change | Blocking? | Repository Evidence | Target Implementation Area |
+| :--- | :--- | :--- | :--- | :--- |
+| **REQ-01** | **Standalone PostgreSQL Driver Integration** | **YES** | `pg` package absent from `apps/api/package.json`; PGlite used | `apps/api/src/db/index.ts` & `package.json` |
+| **REQ-02** | **Production Secret Externalization & Injection** | **YES** | No secret injection pipeline; default secrets throw FATAL | Deployment Infrastructure / Secrets Vault |
+| **REQ-03** | **Automated Production CI/CD Pipeline** | **YES** | `.github/workflows/` directory absent | `.github/workflows/ci.yml` |
+| **REQ-04** | **Production Auth Lifecycle & Token Endpoints** | **YES** | HMAC hook verified, but token issuance/revocation API incomplete | `AuthService.ts` & API Routes |
+| **REQ-05** | **Dependency Security Remediation / Risk Acceptance**| **YES** | 12 advisories found; high vulnerabilities in Fastify & Drizzle | Dependency Audit / Security Gate |
 
 ---
 
@@ -271,14 +279,14 @@ An empirical `npm audit` execution was performed on the workspace:
 
 ---
 
-## 14. Database Gate
+## 14. Database Migration Gate
 
 ```
-New Tables: 0
-New Migrations: 0
-Schema Changes: 0
+New Phase 20 Migration Files: 0
+New Phase 20 Schema Design: 0
+Production Schema Migration Execution: REQUIRED using existing migration set
 ```
-Phase 20 planning introduces **ZERO** database schema changes or migration files.
+Phase 20 planning introduces **ZERO** database schema changes or migration files. If token revocation or authentication lifecycle features eventually require a database table, it will require separate schema and migration authorization.
 
 ---
 
@@ -286,13 +294,15 @@ Phase 20 planning introduces **ZERO** database schema changes or migration files
 
 ### Exclusions from Phase 20 Planning:
 * ❌ NO Phase 20 implementation execution or code modifications.
+* ❌ NO installation of `pg` or `@types/pg` during planning.
+* ❌ NO creation of `AuthService` or token issuance endpoints during planning.
 * ❌ NO infrastructure provisioning or deployment.
 * ❌ NO real production secret configuration or key generation.
 * ❌ NO database schema changes or migration file creation.
-* ❌ NO package dependency upgrades or new package installations.
+* ❌ NO package dependency upgrades or installations.
 * ❌ NO creation of CI/CD workflow files during planning.
 * ❌ NO modification to financial logic, Decimal.js calculations, or P&L formulas.
-* ❌ NO changes to Fastify REST API response contracts or endpoint routes.
+* ❌ NO changes to existing Fastify REST API response contracts.
 * ❌ NO redesign of the APEX OS user interface or CSS architecture.
 
 ---
@@ -309,7 +319,7 @@ Repository Inspection:
 COMPLETE
 
 Current Test Baseline:
-36 Vitest test files / 291 tests (291 passed, 0 failed, 0 skipped)
+36 Vitest test files / 291 tests
 
 Type Check:
 PASSED
@@ -321,10 +331,10 @@ Production Readiness Areas Audited:
 25
 
 Blocking Production Gaps:
-4 (REQ-01: PostgreSQL driver missing; REQ-02: Production secret injection missing; REQ-03: CI/CD pipeline missing; REQ-04: Auth token management API incomplete)
+5 (REQ-01: PostgreSQL driver missing; REQ-02: Production secret injection missing; REQ-03: CI/CD pipeline missing; REQ-04: Auth token management API incomplete; REQ-05: Unresolved high/critical dependency vulnerabilities)
 
 Required Production Changes:
-4
+5
 
 External Infrastructure Dependencies:
 4 (Standalone PostgreSQL 16+ DB, Ingress Router / Reverse Proxy / TLS, Secrets Vault / KMS, CI/CD Runner / Container Registry)
@@ -339,13 +349,19 @@ Financial Logic Changes:
 0
 
 API Contract Changes:
-0
+EXPECTED FOR AUTH LIFECYCLE / OTHERWISE 0
 
 Security Behavior Changes:
-0
+CURRENT: Request HMAC & RBAC verification | PLANNED: Full token issuance & revocation lifecycle
 
 UI Redesign:
 0
+
+Dependency Security:
+12 vulnerabilities found (7 moderate, 4 high, 1 critical)
+
+Dependency Production Gate:
+BLOCKED — REMEDIATION OR FORMAL RISK ACCEPTANCE REQUIRED
 
 Deployment:
 NOT IMPLEMENTED
@@ -358,9 +374,6 @@ NOT CONFIGURED
 
 CI/CD:
 NOT IMPLEMENTED
-
-Dependency Security:
-12 vulnerabilities found (7 moderate, 4 high, 1 critical; unresolved residual risk in Fastify 4.x and Drizzle-ORM 0.36.x)
 
 Phase 20 Implementation:
 NOT STARTED
