@@ -32,25 +32,25 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 - **Current `npm audit` Output:** 12 vulnerabilities (7 moderate, 4 high, 1 critical)
 - **Production Release Status:** **BLOCKED** by unresolved runtime dependency vulnerabilities
 
+> [!NOTE]  
+> The vulnerability count (12 vulnerabilities: 7 moderate, 4 high, 1 critical) represents the project's observed `npm audit` baseline at planning time. The post-implementation `npm audit` result is authoritative for final release gating.
+
 ---
 
-## 3. Runtime Audit & Node.js Decision
+## 3. Runtime Audit & Node.js Policy
 
-### 3.1 Environment Overview
+### 3.1 Environment & Engine Alignment Table
 
-| Layer | Current Version | Engine Policy | Proposed Target | Justification & Compatibility |
-| :--- | :--- | :--- | :--- | :--- |
-| **Local Environment** | Node.js `v24.11.1` | `>=20.0.0` | **Node.js 24 (v24.x)** | Development machine currently runs Node `v24.11.1`. Full compatibility verified across local Vitest test suites. |
-| **CI Workflow** | Node.js `20.x` | `>=20.0.0` | **Node.js 22 LTS (v22.x)** | Upgrades `.github/workflows/ci.yml` from Node 20 to Node 22 Active LTS for enterprise CI build reproducibility. |
-| **Engine Boundary** | `package.json` | `>=20.0.0` | **`>=22.0.0`** | Permissive boundary allowing Node 22 LTS in CI/Production while seamlessly supporting Node 24 in local development. |
-| **Package Manager** | npm `11.6.2` | `>=10.0.0` | **npm 10.x / 11.x** | Consistent lockfile v3 processing (`lockfileVersion: 3`) and workspace dependency hoisting. |
-| **TypeScript Toolchain**| TypeScript `5.9.3` | `^5.6.3` | **TypeScript 5.9.x** | Complete support for NodeNext ESM resolution and Drizzle 0.45.x type definitions. |
+| Layer | Current Version | Selected Target | Policy & Justification |
+| :--- | :--- | :--- | :--- |
+| **Local Development** | Node.js `v24.11.1` | Node.js `24.x` | **Retain**: Workstation runs Node `v24.11.1`. Full test suite compatibility verified locally across all workspace tests. |
+| **CI Workflow** | Node.js `20.x` | Node.js `22.x` | **Controlled LTS Baseline**: Upgrades `.github/workflows/ci.yml` from Node 20 to Node 22 for reproducible CI build validation. |
+| **package.json Engines**| `"node": ">=20.0.0"` | `"node": ">=22.0.0"` | **Permissive Boundary**: Supports CI Node 22 LTS baseline while permitting local execution on Node 24 without artificial version friction. |
+| **Production Runtime** | Not provisioned | Node.js `22+` | **Deployment Policy**: Must align with production container/infrastructure runtime policies upon provisioning. |
 
-### 3.2 Node.js 22 LTS vs. Node.js 24 Comparison & Policy
+### 3.2 Node.js Policy Terminology
 
-- **Node.js 22 LTS (v22.x):** Active LTS release (Maintenance until April 2027). Selected as the standard CI runtime target in `.github/workflows/ci.yml` for production build stability.
-- **Node.js 24 (v24.x):** Current development workstation runtime (`v24.11.1`).
-- **Engine Policy:** Setting `"node": ">=22.0.0"` in `package.json` guarantees that CI and deployment runners use stable LTS (Node 22) while allowing local execution on Node 24 without artificial version downgrade friction.
+Node 22 is the selected CI compatibility baseline within the currently supported LTS lines. Node 24 is the current local development LTS runtime and remains permitted by the `>=22` engine policy. CI uses Node 22 intentionally as a controlled reproducibility baseline, not because Node 24 is unsupported.
 
 ---
 
@@ -93,20 +93,21 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 
 ## 5. Current Security Advisory Inventory
 
-| Package | Advisory ID | Severity | Affected Range | Minimum Fixed | Installed | Project Exposure | Proposed Resolution Target |
+| Advisory ID | Subject & Description | Severity | Affected Range | Patched Version | Installed | Exposure Status | Selected Target Resolution |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `fastify` | GHSA-mrq3-vjjr-p77c | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Memory allocation DoS in `sendWebStream`. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-jx2c-rxcm-jvmq | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: `Content-Type` tab character body validation bypass. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-444r-cwp2-x5xf | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: `X-Forwarded-Proto`/`Host` header spoofing. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-w2qp-rph6-63g4 | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Primitive coercion mismatch schema bypass. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-9q9j-q6p8-xq58 | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: DoS via malformed multipart stream header parsing. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-hwr6-493r-vm6h | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Host header injection via unescaped authority routing. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-p68q-wchp-6fh7 | MODERATE | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Memory leak in long-lived connection handler. | Upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-667r-xxjv-c9mm | MODERATE | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: HTTP request smuggling via trailing space in transfer-encoding. | Upgrade to `fastify ^5.12.5`. |
-| `find-my-way` | GHSA-c96f-x56v-gq3h | HIGH | `<=9.6.0` | `9.7.0` | `8.2.2` | **Transitive Runtime**: HTTP/2 DDoS vulnerability (via Fastify 4.x). | Resolves via Fastify 5 upgrade (`find-my-way ^9.7.0`). |
-| `drizzle-orm` | GHSA-gpj5-g38j-94v9 | HIGH | `<0.45.2` | `0.45.2` | `0.36.4` | **Potential Runtime**: SQL injection via `sql.identifier` / `.as()`. Grep confirms zero source usage, but ORM patch is mandatory. | Major upgrade to `drizzle-orm ^0.45.3`. |
-| `vitest` / `@vitest/mocker` | GHSA-82fw-gwwq-j7x9 | MODERATE | `>=2.1.0 <4.1.11` | `4.1.11` | `2.1.9` | **Dev / Test Tooling**: Path traversal in mock redirect handler. | Major upgrade to `vitest ^4.1.11`. |
-| `esbuild` | GHSA-67mh-4wv8-2f99 | MODERATE | `<=0.24.2` | `0.25.0` | `0.21.5` | **Dev / Build Tooling**: Local dev server request forgery (via `vite@5` & `drizzle-kit@0.28`). | Upgrade `vite` to `^6.4.3` and `drizzle-kit` to `^0.31.11`. |
+| **GHSA-mrq3-vjjr-p77c** | Fastify `sendWebStream` unbounded-memory-allocation denial of service. | HIGH | `<=5.7.2` | `5.7.3` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-jx2c-rxcm-jvmq** | Fastify `Content-Type` header tab-character body-validation bypass. | HIGH | `<=5.7.1` | `5.7.2` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-444r-cwp2-x5xf** | Fastify `X-Forwarded-Proto` / `X-Forwarded-Host` spoofing under restrictive `trustProxy`. | HIGH | `<=5.8.2` | `5.8.3` / `4.29.3` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-w2qp-rph6-63g4** | Fastify root-primitive coercion mismatch causing schema-validation bypass. | HIGH | `<=5.12.0` | `5.12.1` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-9q9j-q6p8-xq58** | Fastify request-validation bypass caused by skipped JSON Schema boolean `false` schemas. | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-hwr6-493r-vm6h** | Fastify authentication bypass involving malformed URLs reaching encapsulated not-found handlers. | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-p68q-wchp-6fh7** | Fastify request-body replacement via async validation result collision. | MODERATE | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-667r-xxjv-c9mm** | Fastify schema-validation bypass involving root primitive coercion mismatch / async validation handling. | MODERATE | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-4mh8-r7rc-xpvc** | Fastify denial of service via unhandled exception on HTTP/2 trailer responses (impact requires HTTP/2 and `reply.trailer()`). | MODERATE | `<5.12.5` | `5.12.5` | `4.29.1` | **Potential Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-c96f-x56v-gq3h** | `find-my-way` HTTP/2 DDoS vulnerability (transitive via Fastify 4.x). | HIGH | `<=9.6.0` | `9.7.0` | `8.2.2` | **Transitive Runtime** | Resolves via Fastify 5 (`find-my-way ^9.7.0`). |
+| **GHSA-gpj5-g38j-94v9** | Drizzle ORM SQL injection via `sql.identifier` / `.as()`. | HIGH | `<0.45.2` | `0.45.2` | `0.36.4` | **Potential Runtime** (Zero source usage) | Upgrade to `drizzle-orm ^0.45.3`. |
+| **GHSA-82fw-gwwq-j7x9** | `vitest` / `@vitest/mocker` path traversal in mock redirect handler. | MODERATE | `>=2.1.0 <4.1.11` | `4.1.11` | `2.1.9` | **Dev / Test Tooling** | Upgrade to `vitest ^4.1.11`. |
+| **GHSA-67mh-4wv8-2f99** | `esbuild` local dev server request forgery (via `vite@5` & `drizzle-kit@0.28`). | MODERATE | `<=0.24.2` | `0.25.0` | `0.21.5` | **Dev / Build Tooling** | Upgrade `vite` to `^6.4.3` and `drizzle-kit` to `^0.31.11`. |
 
 ---
 
@@ -115,7 +116,7 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 ### 6.1 Fastify v5 Upgrade Target
 
 - **Selected Target:** `fastify ^5.12.5`
-- **Justification:** `5.12.5` is the latest stable release satisfying all identified Fastify security advisories (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-9q9j-q6p8-xq58, GHSA-hwr6-493r-vm6h, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm).
+- **Reason:** Current stable Fastify 5 release that addresses all applicable identified Fastify advisories in this planning baseline (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-9q9j-q6p8-xq58, GHSA-hwr6-493r-vm6h, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm, GHSA-4mh8-r7rc-xpvc).
 
 ### 6.2 Fastify Plugin Targets
 
@@ -138,7 +139,7 @@ Authoritative registry lookup via `npm view`:
 ### 7.2 Selected Strategy: Strategy A (Retain Zod 3)
 
 - **Selected Combination:** `fastify-type-provider-zod ^4.0.0` + `zod 3.25.76` + `fastify ^5.12.5`.
-- **Rationale:** `fastify-type-provider-zod@^4.0.0` provides native Fastify 5 support while declaring peer dependency compatibility with Zod 3 (`^3.14.2`). This eliminates the contradiction identified in previous audits and avoids an unnecessary breaking Zod 4 migration across domain schemas.
+- **Rationale:** `fastify-type-provider-zod@^4.0.0` provides native Fastify 5 support while declaring peer dependency compatibility with Zod 3 (`^3.14.2`). This preserves domain schema stability and avoids a major Zod 4 refactoring across all application routes and Drizzle schemas.
 
 ---
 
@@ -154,7 +155,7 @@ Authoritative registry lookup via `npm view`:
 ## 9. Vite & Vitest Security Analysis
 
 - **Vitest Target Correction:**
-  - **Security Requirement:** GHSA-82fw-gwwq-j7x9 affects Vitest `>=2.1.0 <4.1.11`. Vitest 3.x is **NOT** secure against this advisory.
+  - **Advisory:** GHSA-82fw-gwwq-j7x9 affects Vitest `>=2.1.0 <4.1.11`. Vitest 3.x is **NOT** secure against this advisory.
   - **Minimum Secure Version:** `4.1.11`
   - **Selected Implementation Target:** `vitest ^4.1.11`
   - **Compatibility:** Fully compatible with `@testing-library/react` 16.x, `jsdom` 25.x, and React 19.
@@ -176,7 +177,7 @@ graph TD
     Drizzle045["drizzle-orm ^0.45.3"] --> DrizzleCore["drizzle-orm core (Fixes GHSA-gpj5-g38j-94v9)"]
 ```
 
-Expected resolution: All 4 high/critical vulnerabilities and 7 moderate vulnerabilities resolve upon updating the direct dependencies to their selected implementation targets. Final confirmation is determined empirically via `npm ls` and `npm audit` following implementation.
+Expected resolution: The selected direct upgrades are intended to replace affected transitive versions. Final confirmation is determined empirically via `npm ls` and `npm audit` following implementation.
 
 ---
 
@@ -316,7 +317,7 @@ If any breaking incompatibility occurs during implementation:
 
 ```
 Step 1: Check out baseline commit 125c8dc90aaf2c30c3187dfad490563becda62a4 and verify clean working tree.
-Step 2: Update engines field in package.json and node-version in .github/workflows/ci.yml to Node 22 LTS.
+Step 2: Update engines field in package.json to ">=22.0.0" and node-version in .github/workflows/ci.yml to Node 22 LTS.
 Step 3: Update apps/api/package.json with fastify ^5.12.5, fastify-type-provider-zod ^4.0.0, @fastify/cors ^11.3.0, @fastify/rate-limit ^11.2.0, drizzle-orm ^0.45.3, drizzle-kit ^0.31.11; remove @types/ioredis.
 Step 4: Update apps/web/package.json with vite ^6.4.3, @vitejs/plugin-react ^4.3.4, vitest ^4.1.11.
 Step 5: Execute npm install to generate updated package-lock.json (v3).
@@ -352,7 +353,7 @@ Step 18: Produce final Phase 21 execution report.
 | :--- | :--- |
 | Current audit verified | **PASS** |
 | Current dependency versions verified via `npm view` | **PASS** |
-| Current advisories verified (including Sept 2026 advisories) | **PASS** |
+| Current advisories verified (including GHSA-4mh8-r7rc-xpvc) | **PASS** |
 | Fastify target verified (`^5.12.5`) | **PASS** |
 | Fastify plugin compatibility verified (`@fastify/cors ^11.3.0`, `@fastify/rate-limit ^11.2.0`) | **PASS** |
 | Vitest security target corrected (`^4.1.11` minimum fixed `4.1.11`) | **PASS** |
