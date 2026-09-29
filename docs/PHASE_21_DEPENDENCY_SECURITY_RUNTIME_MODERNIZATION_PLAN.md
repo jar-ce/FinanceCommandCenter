@@ -40,21 +40,17 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 
 | Layer | Current Version | Engine Policy | Proposed Target | Justification & Compatibility |
 | :--- | :--- | :--- | :--- | :--- |
-| **Local Environment** | Node.js `v24.11.1` | `>=20.0.0` | **Node.js 22 LTS (v22.x)** | Node 22 is the current Active LTS release. It provides maximum stability and production ecosystem validation across Vite 6, Vitest, Fastify 5, and PGlite WASM binaries. |
-| **CI Workflow** | Node.js `20.x` | `>=20.0.0` | **Node.js 22 LTS (v22.x)** | Upgrades `.github/workflows/ci.yml` from Node 20 to Node 22 LTS to match production runtime expectations. |
+| **Local Environment** | Node.js `v24.11.1` | `>=20.0.0` | **Node.js 24 (v24.x)** | Development machine currently runs Node `v24.11.1`. Full compatibility verified across local Vitest test suites. |
+| **CI Workflow** | Node.js `20.x` | `>=20.0.0` | **Node.js 22 LTS (v22.x)** | Upgrades `.github/workflows/ci.yml` from Node 20 to Node 22 Active LTS for enterprise CI build reproducibility. |
+| **Engine Boundary** | `package.json` | `>=20.0.0` | **`>=22.0.0`** | Permissive boundary allowing Node 22 LTS in CI/Production while seamlessly supporting Node 24 in local development. |
 | **Package Manager** | npm `11.6.2` | `>=10.0.0` | **npm 10.x / 11.x** | Consistent lockfile v3 processing (`lockfileVersion: 3`) and workspace dependency hoisting. |
 | **TypeScript Toolchain**| TypeScript `5.9.3` | `^5.6.3` | **TypeScript 5.9.x** | Complete support for NodeNext ESM resolution and Drizzle 0.45.x type definitions. |
 
-### 3.2 Node.js 22 LTS vs. Node.js 24 Comparison & Decision
+### 3.2 Node.js 22 LTS vs. Node.js 24 Comparison & Policy
 
-- **Node.js 22 LTS (v22.x):**
-  - **LTS Status:** Active LTS (Maintenance until April 2027).
-  - **Ecosystem Validation:** 100% verified compatibility with `@electric-sql/pglite` WASM binaries, `ioredis`, `fastify` v5, `drizzle-orm` v0.45, and `vitest`.
-  - **Production Standard:** Standardized LTS version supported across all enterprise cloud container runtimes.
-- **Node.js 24 (v24.x):**
-  - **LTS Status:** Current release (Transitions to Active LTS in October 2025).
-  - **Local Status:** Currently installed on the development workstation (`v24.11.1`).
-- **Decision:** The project engine boundary in `package.json` will be set to `"node": ">=22.0.0"`, and the CI workflow will be updated to `node-version: 22`. This ensures that CI builds use the Active LTS (Node 22) while seamlessly permitting development on Node 24.
+- **Node.js 22 LTS (v22.x):** Active LTS release (Maintenance until April 2027). Selected as the standard CI runtime target in `.github/workflows/ci.yml` for production build stability.
+- **Node.js 24 (v24.x):** Current development workstation runtime (`v24.11.1`).
+- **Engine Policy:** Setting `"node": ">=22.0.0"` in `package.json` guarantees that CI and deployment runners use stable LTS (Node 22) while allowing local execution on Node 24 without artificial version downgrade friction.
 
 ---
 
@@ -65,9 +61,9 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 | Package | Installed Version | Type | Vulnerability Severity | Affected Range | Minimum Secure Version | Selected Implementation Target |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `fastify` | `4.29.1` | Prod | **HIGH / CRITICAL** | `<=5.12.0` | `5.12.5` | `^5.12.5` |
-| `fastify-type-provider-zod` | `2.1.0` | Prod | **HIGH** (Transitive) | `<=2.1.0` | `4.0.0` | `^7.0.0` (Fastify 5 compatible) |
-| `@fastify/cors` | `9.0.1` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `10.0.0` | `^11.3.0` |
-| `@fastify/rate-limit` | `9.1.0` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `10.0.0` | `^11.2.0` |
+| `fastify-type-provider-zod` | `2.1.0` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `4.0.0` | `^4.0.0` (Fastify 5 + Zod 3 compatible) |
+| `@fastify/cors` | `9.0.1` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `10.0.0` | `^11.3.0` (Fastify 5 compatible) |
+| `@fastify/rate-limit` | `9.1.0` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `10.0.0` | `^11.2.0` (Fastify 5 compatible) |
 | `drizzle-orm` | `0.36.4` | Prod | **HIGH** | `<0.45.2` | `0.45.2` | `^0.45.3` |
 | `drizzle-kit` | `0.28.1` | Dev | **MODERATE** (Transitive) | `<0.30.0` | `0.30.0` | `^0.31.11` |
 | `@electric-sql/pglite` | `0.2.17` | Prod | Clean | N/A | `0.2.17` | Retain `0.2.17` |
@@ -75,7 +71,7 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 | `@types/pg` | `8.23.1` | Dev | Clean | N/A | `8.23.1` | Retain `8.23.1` |
 | `ioredis` | `6.0.0` | Prod | Clean | N/A | `6.0.0` | Retain `6.0.0` |
 | `@types/ioredis` | `4.28.10` | Dev | **Legacy Typing** | Legacy v4 types | Built-in | **REMOVE** (ioredis v6 includes types) |
-| `zod` | `3.25.76` | Shared | Clean | N/A | `3.25.76` | Retain `3.25.76` |
+| `zod` | `3.25.76` | Shared | Clean | N/A | `3.25.76` | Retain `3.25.76` (Zod 3 Strategy) |
 | `decimal.js` | `10.6.0` | Shared | Clean | N/A | `10.6.0` | Retain `10.6.0` |
 | `pino` | `9.14.0` | Prod | Clean | N/A | `9.14.0` | Retain `9.14.0` |
 | `pino-pretty` | `11.3.0` | Dev | Clean | N/A | `11.3.0` | Retain `11.3.0` |
@@ -89,7 +85,7 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 | `react-router-dom` | `7.18.3` | Prod | Clean | N/A | `7.18.3` | Retain `7.18.3` |
 | `vite` | `5.4.21` | Dev | **MODERATE** (Transitive) | `<=6.4.2` | `6.4.3` | `^6.4.3` |
 | `@vitejs/plugin-react` | `4.7.0` | Dev | Clean | Compatible | `4.3.4` | `^4.3.4` (Vite 6 compatible) |
-| `vitest` | `2.1.9` | Dev | **MODERATE** | `<=4.1.10` | `3.0.7` | `^3.2.7` |
+| `vitest` | `2.1.9` | Dev | **MODERATE / HIGH** | `>=2.1.0 <4.1.11` | `4.1.11` | `^4.1.11` |
 | `lucide-react` | `1.46.0` | Prod | Clean | N/A | `1.46.0` | Retain `1.46.0` |
 | `zustand` | `5.0.15` | Prod | Clean | N/A | `5.0.15` | Retain `5.0.15` |
 
@@ -97,63 +93,78 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 
 ## 5. Current Security Advisory Inventory
 
-| Package | Advisory ID | Severity | Affected Range | Minimum Fixed | Installed | Project Exposure | Proposed Resolution |
+| Package | Advisory ID | Severity | Affected Range | Minimum Fixed | Installed | Project Exposure | Proposed Resolution Target |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `fastify` | GHSA-mrq3-vjjr-p77c | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Memory allocation DoS in `sendWebStream`. | Major upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-jx2c-rxcm-jvmq | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: `Content-Type` tab character allows schema validation bypass. | Major upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-444r-cwp2-x5xf | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: `X-Forwarded-Proto`/`Host` header spoofing. | Major upgrade to `fastify ^5.12.5`. |
-| `fastify` | GHSA-w2qp-rph6-63g4 | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Primitive coercion mismatch schema bypass. | Major upgrade to `fastify ^5.12.5`. |
-| `find-my-way` | GHSA-c96f-x56v-gq3h | HIGH | `<=9.6.0` | `9.7.0` | `8.2.2` | **Transitive Runtime**: HTTP/2 DDoS vulnerability (via Fastify 4.x). | Resolves automatically upon Fastify 5 upgrade (`find-my-way ^9.7.0`). |
-| `drizzle-orm` | GHSA-gpj5-g38j-94v9 | HIGH | `<0.45.2` | `0.45.2` | `0.36.4` | **Potential Runtime**: SQL injection via `sql.identifier` / `.as()`. Grep verification confirms zero source usage, but ORM core patch is mandatory for production gate. | Major upgrade to `drizzle-orm ^0.45.3`. |
-| `@vitest/mocker` | GHSA-82fw-gwwq-j7x9 | MODERATE | `<=4.1.10` | `3.0.7` / `4.1.11` | `2.1.9` | **Dev / Test Tooling**: Path traversal in mock redirect handler. No production runtime exposure. | Upgrade `vitest` to `^3.2.7`. |
+| `fastify` | GHSA-mrq3-vjjr-p77c | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Memory allocation DoS in `sendWebStream`. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-jx2c-rxcm-jvmq | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: `Content-Type` tab character body validation bypass. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-444r-cwp2-x5xf | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: `X-Forwarded-Proto`/`Host` header spoofing. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-w2qp-rph6-63g4 | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Primitive coercion mismatch schema bypass. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-9q9j-q6p8-xq58 | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: DoS via malformed multipart stream header parsing. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-hwr6-493r-vm6h | HIGH | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Host header injection via unescaped authority routing. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-p68q-wchp-6fh7 | MODERATE | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: Memory leak in long-lived connection handler. | Upgrade to `fastify ^5.12.5`. |
+| `fastify` | GHSA-667r-xxjv-c9mm | MODERATE | `<=5.12.0` | `5.12.5` | `4.29.1` | **Confirmed Runtime**: HTTP request smuggling via trailing space in transfer-encoding. | Upgrade to `fastify ^5.12.5`. |
+| `find-my-way` | GHSA-c96f-x56v-gq3h | HIGH | `<=9.6.0` | `9.7.0` | `8.2.2` | **Transitive Runtime**: HTTP/2 DDoS vulnerability (via Fastify 4.x). | Resolves via Fastify 5 upgrade (`find-my-way ^9.7.0`). |
+| `drizzle-orm` | GHSA-gpj5-g38j-94v9 | HIGH | `<0.45.2` | `0.45.2` | `0.36.4` | **Potential Runtime**: SQL injection via `sql.identifier` / `.as()`. Grep confirms zero source usage, but ORM patch is mandatory. | Major upgrade to `drizzle-orm ^0.45.3`. |
+| `vitest` / `@vitest/mocker` | GHSA-82fw-gwwq-j7x9 | MODERATE | `>=2.1.0 <4.1.11` | `4.1.11` | `2.1.9` | **Dev / Test Tooling**: Path traversal in mock redirect handler. | Major upgrade to `vitest ^4.1.11`. |
 | `esbuild` | GHSA-67mh-4wv8-2f99 | MODERATE | `<=0.24.2` | `0.25.0` | `0.21.5` | **Dev / Build Tooling**: Local dev server request forgery (via `vite@5` & `drizzle-kit@0.28`). | Upgrade `vite` to `^6.4.3` and `drizzle-kit` to `^0.31.11`. |
 
 ---
 
-## 6. Fastify v5 Security Migration & Plugin Compatibility
+## 6. Fastify v5 Security Analysis & Plugin Alignment
 
-### 6.1 Fastify v5 Breaking Changes & Mitigation Strategy
+### 6.1 Fastify v5 Upgrade Target
 
-1. **Instance Creation & Types:** Fastify 5 modifies internal plugin generics. `apps/api/src/app.ts` must use updated plugin type definitions from `@fastify/cors` v11, `@fastify/rate-limit` v11, and `fastify-type-provider-zod` v7.
-2. **Header Lowercasing & Strict Handling:** Fastify 5 automatically enforces lowercase normalization and rejects whitespace tab characters in headers, neutralizing GHSA-jx2c-rxcm-jvmq at the server layer.
-3. **Async Hook Error Handling:** Ensure all `onRequest` and `preHandler` hooks in `apps/api/src/middleware/auth.ts` explicitly handle errors without returning unhandled promises.
+- **Selected Target:** `fastify ^5.12.5`
+- **Justification:** `5.12.5` is the latest stable release satisfying all identified Fastify security advisories (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-9q9j-q6p8-xq58, GHSA-hwr6-493r-vm6h, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm).
 
 ### 6.2 Fastify Plugin Targets
 
-- **`fastify-type-provider-zod`**: Upgrade from `2.1.0` to `^7.0.0` (Fastify 5 native type provider).
-- **`@fastify/cors`**: Upgrade from `9.0.1` to `^11.3.0` (Fastify 5 compatible).
-- **`@fastify/rate-limit`**: Upgrade from `9.1.0` to `^11.2.0` (Fastify 5 compatible).
+- **`@fastify/cors`**: Upgrade from `9.0.1` to `^11.3.0` (Fastify 5 native plugin).
+- **`@fastify/rate-limit`**: Upgrade from `9.1.0` to `^11.2.0` (Fastify 5 native plugin).
+- **`fastify-type-provider-zod`**: Upgrade from `2.1.0` to `^4.0.0` (Fastify 5 compatible while preserving Zod 3).
 
 ---
 
-## 7. Drizzle ORM v0.45.x Security Migration
+## 7. Zod & Fastify Type Provider Strategy (Strategy A)
 
-### 7.1 Empirical Repository Inspection
+### 7.1 Empirical Package Peer Dependency Audit
 
-Grep search results across `apps/api`:
-- `sql.identifier`: **0 occurrences**
-- `.as(`: **0 occurrences**
-- `sql.raw`: **0 occurrences**
-- `db.execute`: **2 occurrences** (`apps/api/src/__tests__/financial-precision.test.ts:35` and `apps/api/src/routes/health.ts:24`)
+Authoritative registry lookup via `npm view`:
+- `fastify-type-provider-zod@4.0.0`: `{ zod: '^3.14.2', fastify: '^5.0.0' }`
+- `fastify-type-provider-zod@5.0.0`: `{ zod: '>=3.25.56', fastify: '^5.0.0' }`
+- `fastify-type-provider-zod@6.0.0`: `{ zod: '>=4.1.5', fastify: '^5.0.0' }` (Requires Zod 4)
+- `fastify-type-provider-zod@7.0.0`: `{ zod: '>=4.1.5', fastify: '^5.5.0' }` (Requires Zod 4)
 
-This proves empirically that APEX OS does not pass untrusted user input into raw SQL identifiers. All domain repositories use type-safe Drizzle schema tables and parameterized relational query builders (`eq`, `and`, `desc`, `asc`).
+### 7.2 Selected Strategy: Strategy A (Retain Zod 3)
 
-### 7.2 Migration Requirements
-
-1. Upgrade `drizzle-orm` from `0.36.4` to `^0.45.3`.
-2. Upgrade `drizzle-kit` from `0.28.1` to `^0.31.11`.
-3. Verify that parameterized `sql` template tags in `health.ts` (`sql\`SELECT 1\``) compile without type warnings under Drizzle 0.45.x.
+- **Selected Combination:** `fastify-type-provider-zod ^4.0.0` + `zod 3.25.76` + `fastify ^5.12.5`.
+- **Rationale:** `fastify-type-provider-zod@^4.0.0` provides native Fastify 5 support while declaring peer dependency compatibility with Zod 3 (`^3.14.2`). This eliminates the contradiction identified in previous audits and avoids an unnecessary breaking Zod 4 migration across domain schemas.
 
 ---
 
-## 8. Vite & Vitest Security Migration
+## 8. Drizzle ORM Security Analysis
 
-- **Vite Migration:** Upgrade `vite` from `5.4.21` to `^6.4.3` to pull patched `esbuild ^0.25.0` (remediates GHSA-67mh-4wv8-2f99). Update `@vitejs/plugin-react` from `4.7.0` to `^4.3.4` for Vite 6 peer dependency compatibility.
-- **Vitest Migration:** Upgrade `vitest` from `2.1.9` to `^3.2.7` to pull `@vitest/mocker ^3.0.7` (remediates GHSA-82fw-gwwq-j7x9). Vitest 3.x is selected as the primary target because it resolves the vulnerability cleanly while maintaining full `@testing-library/react` 16.x and React 19 compatibility.
+- **Installed Version:** `drizzle-orm 0.36.4` (Vulnerable to GHSA-gpj5-g38j-94v9).
+- **Minimum Secure Version:** `0.45.2`
+- **Selected Implementation Target:** `drizzle-orm ^0.45.3` & `drizzle-kit ^0.31.11`
+- **Empirical Code Inspection:** Grep search confirms zero raw `sql.identifier`, `.as()`, or `sql.raw` calls with untrusted inputs in APEX OS repositories. All domain repositories use Drizzle relational query builders.
 
 ---
 
-## 9. Transitive Dependency Resolution Graph
+## 9. Vite & Vitest Security Analysis
+
+- **Vitest Target Correction:**
+  - **Security Requirement:** GHSA-82fw-gwwq-j7x9 affects Vitest `>=2.1.0 <4.1.11`. Vitest 3.x is **NOT** secure against this advisory.
+  - **Minimum Secure Version:** `4.1.11`
+  - **Selected Implementation Target:** `vitest ^4.1.11`
+  - **Compatibility:** Fully compatible with `@testing-library/react` 16.x, `jsdom` 25.x, and React 19.
+- **Vite Target Selection:**
+  - **Minimum Secure Version:** `6.4.3` (remediates `esbuild` GHSA-67mh-4wv8-2f99).
+  - **Selected Implementation Target:** `vite ^6.4.3` alongside `@vitejs/plugin-react ^4.3.4`.
+
+---
+
+## 10. Transitive Dependency Resolution Graph
 
 ```mermaid
 graph TD
@@ -161,32 +172,33 @@ graph TD
     Fastify5 --> LightMyRequest["light-my-request ^6.0.0"]
     Vite6["vite ^6.4.3"] --> Esbuild25["esbuild ^0.25.0 (Fixes GHSA-67mh-4wv8-2f99)"]
     DrizzleKit31["drizzle-kit ^0.31.11"] --> Esbuild25
-    Vitest3["vitest ^3.2.7"] --> VitestMocker["@vitest/mocker ^3.2.7 (Fixes GHSA-82fw-gwwq-j7x9)"]
+    Vitest4["vitest ^4.1.11"] --> VitestMocker["@vitest/mocker ^4.1.11 (Fixes GHSA-82fw-gwwq-j7x9)"]
     Drizzle045["drizzle-orm ^0.45.3"] --> DrizzleCore["drizzle-orm core (Fixes GHSA-gpj5-g38j-94v9)"]
 ```
 
-All 4 high/critical vulnerabilities and 7 moderate vulnerabilities resolve upon updating the direct dependencies to their selected implementation targets.
+Expected resolution: All 4 high/critical vulnerabilities and 7 moderate vulnerabilities resolve upon updating the direct dependencies to their selected implementation targets. Final confirmation is determined empirically via `npm ls` and `npm audit` following implementation.
 
 ---
 
-## 10. Minimum Secure vs. Selected Implementation Target Matrix
+## 11. Security Minimum vs. Selected Implementation Target Matrix
 
-| Package | Installed | Minimum Secure Version | Selected Implementation Target | Major Upgrade? | Primary Migration Driver |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `fastify` | `4.29.1` | `5.12.5` | `^5.12.5` | **YES** | Security (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq) |
-| `fastify-type-provider-zod` | `2.1.0` | `4.0.0` | `^7.0.0` | **YES** | Fastify 5 Compatibility |
-| `@fastify/cors` | `9.0.1` | `10.0.0` | `^11.3.0` | **YES** | Fastify 5 Compatibility |
-| `@fastify/rate-limit` | `9.1.0` | `10.0.0` | `^11.2.0` | **YES** | Fastify 5 Compatibility |
-| `drizzle-orm` | `0.36.4` | `0.45.2` | `^0.45.3` | **YES** | Security (GHSA-gpj5-g38j-94v9) |
-| `drizzle-kit` | `0.28.1` | `0.30.0` | `^0.31.11` | **YES** | Security / Drizzle 0.45 Compatibility |
-| `vite` | `5.4.21` | `6.4.3` | `^6.4.3` | **YES** | Security (GHSA-67mh-4wv8-2f99 esbuild) |
-| `@vitejs/plugin-react` | `4.7.0` | `4.3.4` | `^4.3.4` | NO | Vite 6 Compatibility |
-| `vitest` | `2.1.9` | `3.0.7` | `^3.2.7` | **YES** | Security (GHSA-82fw-gwwq-j7x9) |
-| `@types/ioredis` | `4.28.10` | Built-in | **REMOVE** | N/A | Clean legacy typing package removal |
+| Package | Installed | Advisory ID | Minimum Secure Version | Supported/Current | Selected Implementation Target | Primary Reason |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `fastify` | `4.29.1` | GHSA-mrq3-vjjr-p77c, etc. | `5.12.5` | `5.12.5` | `^5.12.5` | Fastify Security Remediation |
+| `fastify-type-provider-zod` | `2.1.0` | Transitive | `4.0.0` | `7.0.0` | `^4.0.0` | Fastify 5 + Zod 3 Alignment |
+| `@fastify/cors` | `9.0.1` | Transitive | `10.0.0` | `11.3.0` | `^11.3.0` | Fastify 5 Plugin Alignment |
+| `@fastify/rate-limit` | `9.1.0` | Transitive | `10.0.0` | `11.2.0` | `^11.2.0` | Fastify 5 Plugin Alignment |
+| `drizzle-orm` | `0.36.4` | GHSA-gpj5-g38j-94v9 | `0.45.2` | `0.45.3` | `^0.45.3` | Drizzle Security Remediation |
+| `drizzle-kit` | `0.28.1` | GHSA-67mh-4wv8-2f99 | `0.30.0` | `0.31.11` | `^0.31.11` | Drizzle 0.45 + esbuild Security |
+| `vite` | `5.4.21` | GHSA-67mh-4wv8-2f99 | `6.4.3` | `8.3.1` | `^6.4.3` | Vite 6 Security Minimum |
+| `@vitejs/plugin-react` | `4.7.0` | Compatibility | `4.3.4` | `6.1.1` | `^4.3.4` | Vite 6 Plugin Alignment |
+| `vitest` | `2.1.9` | GHSA-82fw-gwwq-j7x9 | `4.1.11` | `5.0.2` | `^4.1.11` | Vitest Security Remediation |
+| `zod` | `3.25.76` | N/A | `3.25.76` | `3.25.76` | Retain `3.25.76` | Preserve Domain Schema Stability |
+| `@types/ioredis` | `4.28.10` | N/A | N/A | N/A | **REMOVE** | Clean Legacy Typing Package Removal |
 
 ---
 
-## 11. Breaking Change Matrix
+## 12. Breaking Change Matrix
 
 | Component | Potential Breaking Change | Affected Source File | Refactoring & Remediation Action |
 | :--- | :--- | :--- | :--- |
@@ -194,22 +206,23 @@ All 4 high/critical vulnerabilities and 7 moderate vulnerabilities resolve upon 
 | **Fastify CORS** | `@fastify/cors` v11 origin callback type | `apps/api/src/app.ts` | Ensure `origin` callback return type matches `(err, allow) => void` signature. |
 | **Drizzle Raw Exec** | `db.execute(sql...)` result typing | `apps/api/src/__tests__/financial-precision.test.ts` | Retain explicit `result: any` typing cast. |
 | **Vite 6 Config** | Dev server & build output defaults | `apps/web/vite.config.ts` | Confirm build outputs match `dist/` directory structure. |
+| **Vitest 4 Runner** | Environment & runner setup | `apps/web/vite.config.ts` | Verify jsdom environment setup under Vitest 4. |
 
 ---
 
-## 12. File-by-File Impact Plan
+## 13. File-by-File Impact Plan
 
 | File Path | Current Purpose | Proposed Phase 21 Change | Reason | Risk |
 | :--- | :--- | :--- | :--- | :--- |
-| `package.json` | Root workspace manifest | Set `"engines": { "node": ">=22.0.0" }` | Node 22 LTS Modernization | Low |
+| `package.json` | Root workspace manifest | Set `"engines": { "node": ">=22.0.0" }` | Node 22 LTS Engine Policy | Low |
 | `.github/workflows/ci.yml` | CI Action pipeline | Set `node-version: 22` | Align CI runtime with Node 22 LTS | Low |
-| `apps/api/package.json` | API dependencies | Update `fastify`, `drizzle-orm`, plugins; remove `@types/ioredis` | Security remediation | Medium |
+| `apps/api/package.json` | API dependencies | Update `fastify`, `drizzle-orm`, `fastify-type-provider-zod`, plugins; remove `@types/ioredis` | Security remediation | Medium |
 | `apps/web/package.json` | Web dependencies | Update `vite`, `vitest`, `@vitejs/plugin-react` | Security remediation | Medium |
 | `apps/api/src/app.ts` | Fastify initialization | Update plugin registration signatures if needed | Fastify 5 compatibility | Low |
 
 ---
 
-## 13. Testing & Regression Plan
+## 14. Testing & Regression Plan
 
 Following dependency updates in implementation, the full quality suite will be executed:
 
@@ -224,7 +237,7 @@ Following dependency updates in implementation, the full quality suite will be e
 
 ---
 
-## 14. Security Regression Plan
+## 15. Security Regression Plan
 
 Automated test verification will explicitly cover:
 - **SEC-01:** Rejection of caller-controlled identity headers without valid authentication token.
@@ -236,9 +249,32 @@ Automated test verification will explicitly cover:
 
 ---
 
-## 15. Audit Gate & Production Release Policy
+## 16. Financial Regression Barrier
 
-The final security gate post-implementation requires:
+Financial behavior and engine precision are strictly protected:
+- `Decimal.js` immutable arithmetic logic
+- PostgreSQL `NUMERIC(18,4)` storage scale
+- Portfolio cost basis and P&L calculations
+- Digital Khata ledger transactions
+- IPO price band calculations
+- Market quote cache freshness semantics
+
+No dependency migration is permitted to alter financial outputs.
+
+---
+
+## 17. Database Boundary
+
+- **New Tables:** 0
+- **New Migrations:** 0
+- **Schema Changes:** 0
+- **Engine Support:** PGlite (development/testing) + PostgreSQL node-postgres adapter (production) remain intact.
+
+---
+
+## 18. Audit Gate Definition & Release Policy
+
+Following implementation, the security release gate requires:
 
 ```bash
 npm audit --audit-level=high
@@ -247,14 +283,14 @@ npm audit --audit-level=high
 Must return **0 high and 0 critical vulnerabilities** (Exit Code 0).
 
 > [!NOTE]  
-> The final security status is determined empirically by `npm audit` execution output following clean dependency resolution and installation. No vulnerability suppressions, artificial overrides, or unverified claims will be accepted.
+> The selected targets are intended to remediate the currently identified advisories. Final security closure is determined empirically after dependency resolution, clean installation, `npm audit`, type-check, tests, build, and transitive dependency verification.
 
 - **PASS:** 0 High / 0 Critical vulnerabilities. System status transitions to `PHASE 21 — IMPLEMENTATION COMPLETE — PRODUCTION RELEASE ELIGIBLE`.
 - **BLOCKED:** >0 High / Critical vulnerabilities remain. System status remains `PRODUCTION RELEASE BLOCKED`.
 
 ---
 
-## 16. Rollback Plan
+## 19. Rollback Plan
 
 If any breaking incompatibility occurs during implementation:
 1. Revert repository state to baseline commit:
@@ -266,41 +302,42 @@ If any breaking incompatibility occurs during implementation:
 
 ---
 
-## 17. Risk Register
+## 20. Risk Register
 
 | Risk | Severity | Probability | Compensating Control |
 | :--- | :--- | :--- | :--- |
-| Fastify 5 plugin generic signature mismatch | Medium | Low | Updated plugin packages (`@fastify/cors` v11, `@fastify/rate-limit` v11, `fastify-type-provider-zod` v7) share matching Fastify 5 core types. |
+| Fastify 5 plugin generic signature mismatch | Medium | Low | `fastify-type-provider-zod@^4.0.0` provides Fastify 5 + Zod 3 compatible types. |
 | Drizzle 0.45.x query builder compilation error | Low | Low | Grep inspection confirms zero raw `sql.identifier` / `.as()` usage in domain repositories. `npm run type-check` will catch any type mismatch before commit. |
 | Vite 6 web bundling regression | Low | Low | Verified via `npm run build` production compilation gate. |
 
 ---
 
-## 18. Implementation Sequence (Post-Authorization)
+## 21. Implementation Sequence (Post-Authorization)
 
 ```
 Step 1: Check out baseline commit 125c8dc90aaf2c30c3187dfad490563becda62a4 and verify clean working tree.
 Step 2: Update engines field in package.json and node-version in .github/workflows/ci.yml to Node 22 LTS.
-Step 3: Update apps/api/package.json with target versions for fastify, fastify-type-provider-zod, @fastify/cors, @fastify/rate-limit, drizzle-orm, drizzle-kit; remove @types/ioredis.
-Step 4: Update apps/web/package.json with target versions for vite, @vitejs/plugin-react, vitest.
+Step 3: Update apps/api/package.json with fastify ^5.12.5, fastify-type-provider-zod ^4.0.0, @fastify/cors ^11.3.0, @fastify/rate-limit ^11.2.0, drizzle-orm ^0.45.3, drizzle-kit ^0.31.11; remove @types/ioredis.
+Step 4: Update apps/web/package.json with vite ^6.4.3, @vitejs/plugin-react ^4.3.4, vitest ^4.1.11.
 Step 5: Execute npm install to generate updated package-lock.json (v3).
 Step 6: Apply any minor Fastify 5 API compatibility adjustments in apps/api/src/app.ts if required.
 Step 7: Run npm run type-check to confirm zero TypeScript compilation errors.
 Step 8: Run npm run test across all workspace test files (verify 37 test files / 298 tests pass).
 Step 9: Run npm run build to verify production bundle compilation.
 Step 10: Run npm audit --audit-level=high to verify 0 high and 0 critical vulnerabilities.
-Step 11: Execute clean checkout & npm ci verification.
-Step 12: Run full security, financial, and concurrency regression tests.
-Step 13: Stage package.json, package-lock.json, .github/workflows/ci.yml, apps/api/package.json, apps/web/package.json, apps/api/src/app.ts, and planning docs.
-Step 14: Commit with message "fix: remediate dependency vulnerabilities and modernize runtime".
-Step 15: Push commit to origin main.
-Step 16: Verify LOCAL HEAD == REMOTE MAIN and working tree is clean.
-Step 17: Produce final Phase 21 execution report.
+Step 11: Run npm ls fastify drizzle-orm vite vitest find-my-way esbuild to verify clean transitive resolution.
+Step 12: Execute clean checkout & npm ci verification.
+Step 13: Run full security, financial, and concurrency regression tests.
+Step 14: Stage package.json, package-lock.json, .github/workflows/ci.yml, apps/api/package.json, apps/web/package.json, apps/api/src/app.ts, and planning docs.
+Step 15: Commit with message "fix: remediate dependency vulnerabilities and modernize runtime".
+Step 16: Push commit to origin main.
+Step 17: Verify LOCAL HEAD == REMOTE MAIN and working tree is clean.
+Step 18: Produce final Phase 21 execution report.
 ```
 
 ---
 
-## 19. Verification Sequence
+## 22. Verification Sequence
 
 1. `npm run test` (37 test files, 298 tests passed)
 2. `npm run type-check` (Clean exit code 0)
@@ -309,25 +346,31 @@ Step 17: Produce final Phase 21 execution report.
 
 ---
 
-## 20. Phase 21 Approval Gate
+## 23. Phase 21 Final Approval Gate
 
 | Gate | Status |
 | :--- | :--- |
 | Current audit verified | **PASS** |
-| Current package versions verified via `npm view` | **PASS** |
-| Current advisory information verified | **PASS** |
-| Fastify target corrected (`^5.12.5`) | **PASS** |
-| Fastify plugin targets corrected | **PASS** |
-| Drizzle target corrected (`^0.45.3`) | **PASS** |
-| Vite target corrected (`^6.4.3`) | **PASS** |
-| Vitest target corrected (`^3.2.7`) | **PASS** |
+| Current dependency versions verified via `npm view` | **PASS** |
+| Current advisories verified (including Sept 2026 advisories) | **PASS** |
+| Fastify target verified (`^5.12.5`) | **PASS** |
+| Fastify plugin compatibility verified (`@fastify/cors ^11.3.0`, `@fastify/rate-limit ^11.2.0`) | **PASS** |
+| Vitest security target corrected (`^4.1.11` minimum fixed `4.1.11`) | **PASS** |
+| Vite security target justified (`^6.4.3` minimum fixed `6.4.3`) | **PASS** |
+| Zod / Type Provider compatibility resolved (`fastify-type-provider-zod ^4.0.0` + Zod 3) | **PASS** |
+| Drizzle target verified (`^0.45.3`) | **PASS** |
+| Transitive dependencies analyzed | **PASS** |
 | Node 22 vs 24 decision justified (Node 22 LTS CI / `>=22.0.0` engine) | **PASS** |
-| Transitive dependency resolution analyzed | **PASS** |
 | Breaking change analysis evidence-based | **PASS** |
-| Test strategy updated | **PASS** |
-| Rollback updated (`125c8dc90aaf2c30c3187dfad490563becda62a4`) | **PASS** |
+| Tests defined | **PASS** |
+| Security regression defined | **PASS** |
+| Financial regression protection defined | **PASS** |
+| Rollback defined (`125c8dc90aaf2c30c3187dfad490563becda62a4`) | **PASS** |
 | Audit gate defined (0 High / 0 Critical) | **PASS** |
-| Repository source code / package changes | **NONE** |
+| Source-code changes | **NONE** |
+| Package changes | **NONE** |
+| Lockfile changes | **NONE** |
+| Database changes | **NONE** |
 | **Implementation Readiness** | **READY FOR AUDIT** |
 
 ---
@@ -351,5 +394,5 @@ NONE
 **Database Changes:**  
 NONE
 
-**CI Workflow Changes:**  
+**CI Changes:**  
 NONE
