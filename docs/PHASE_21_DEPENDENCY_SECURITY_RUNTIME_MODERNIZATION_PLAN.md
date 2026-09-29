@@ -44,7 +44,7 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 | Layer | Current Version | Selected Target | Policy & Justification |
 | :--- | :--- | :--- | :--- |
 | **Local Development** | Node.js `v24.11.1` | Node.js `24.x` | **Retain**: Workstation runs Node `v24.11.1`. Full test suite compatibility verified locally across all workspace tests. |
-| **CI Workflow** | Node.js `20.x` | Node.js `22.x` | **Controlled LTS Baseline**: Upgrades `.github/workflows/ci.yml` from Node 20 to Node 22 for reproducible CI build validation. |
+| **CI Workflow** | Node.js `20.x` | Node.js `22.x` | **Controlled LTS Baseline**: Upgrades `.github/workflows/ci.yml` from Node 20 to Node 22 Active LTS for reproducible CI build validation. |
 | **package.json Engines**| `"node": ">=20.0.0"` | `"node": ">=22.0.0"` | **Permissive Boundary**: Supports CI Node 22 LTS baseline while permitting local execution on Node 24 without artificial version friction. |
 | **Production Runtime** | Not provisioned | Node.js `22+` | **Deployment Policy**: Must align with production container/infrastructure runtime policies upon provisioning. |
 
@@ -97,13 +97,12 @@ Node 22 is the selected CI compatibility baseline within the currently supported
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **GHSA-mrq3-vjjr-p77c** | Fastify `sendWebStream` unbounded-memory-allocation denial of service. | HIGH | `<=5.7.2` | `5.7.3` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
 | **GHSA-jx2c-rxcm-jvmq** | Fastify `Content-Type` header tab-character body-validation bypass. | HIGH | `<=5.7.1` | `5.7.2` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-444r-cwp2-x5xf** | Fastify `X-Forwarded-Proto` / `X-Forwarded-Host` spoofing under restrictive `trustProxy`. | HIGH | `<=5.8.2` | `5.8.3` / `4.29.3` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-w2qp-rph6-63g4** | Fastify root-primitive coercion mismatch causing schema-validation bypass. | HIGH | `<=5.12.0` | `5.12.1` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-9q9j-q6p8-xq58** | Fastify request-validation bypass caused by skipped JSON Schema boolean `false` schemas. | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-hwr6-493r-vm6h** | Fastify authentication bypass involving malformed URLs reaching encapsulated not-found handlers. | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-p68q-wchp-6fh7** | Fastify request-body replacement via async validation result collision. | MODERATE | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-667r-xxjv-c9mm** | Fastify schema-validation bypass involving root primitive coercion mismatch / async validation handling. | MODERATE | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-4mh8-r7rc-xpvc** | Fastify denial of service via unhandled exception on HTTP/2 trailer responses (impact requires HTTP/2 and `reply.trailer()`). | MODERATE | `<5.12.5` | `5.12.5` | `4.29.1` | **Potential Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-444r-cwp2-x5xf** | Fastify `X-Forwarded-Proto` / `X-Forwarded-Host` spoofing when restrictive `trustProxy` configurations are used. | HIGH | `<=5.8.2` | `5.8.3` / `4.29.3` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-w2qp-rph6-63g4** | Fastify vulnerable to schema validation bypass via root primitive coercion mismatch. | HIGH | `<=5.12.0` | `5.12.1` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-9q9j-q6p8-xq58** | Fastify vulnerable to header validation bypass via incomplete schema case normalization (header-schema property names in dependencies, dependentRequired, dependentSchemas, nested subschemas). | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-p68q-wchp-6fh7** | Fastify vulnerable to authentication bypass via malformed URLs reaching encapsulated not-found handlers. | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-667r-xxjv-c9mm** | Fastify vulnerable to request body replacement via an async validation result collision (validated request part replaced when async validator result contains an attacker-controlled value property). | MODERATE | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-4mh8-r7rc-xpvc** | Fastify denial of service via unhandled exception on HTTP/2 trailer responses (impact requires HTTP/2 enabled and route using `reply.trailer()`). | MODERATE | `<5.12.5` | `5.12.5` | `4.29.1` | **Potential Runtime** | Upgrade to `fastify ^5.12.5`. |
 | **GHSA-c96f-x56v-gq3h** | `find-my-way` HTTP/2 DDoS vulnerability (transitive via Fastify 4.x). | HIGH | `<=9.6.0` | `9.7.0` | `8.2.2` | **Transitive Runtime** | Resolves via Fastify 5 (`find-my-way ^9.7.0`). |
 | **GHSA-gpj5-g38j-94v9** | Drizzle ORM SQL injection via `sql.identifier` / `.as()`. | HIGH | `<0.45.2` | `0.45.2` | `0.36.4` | **Potential Runtime** (Zero source usage) | Upgrade to `drizzle-orm ^0.45.3`. |
 | **GHSA-82fw-gwwq-j7x9** | `vitest` / `@vitest/mocker` path traversal in mock redirect handler. | MODERATE | `>=2.1.0 <4.1.11` | `4.1.11` | `2.1.9` | **Dev / Test Tooling** | Upgrade to `vitest ^4.1.11`. |
@@ -116,7 +115,7 @@ Node 22 is the selected CI compatibility baseline within the currently supported
 ### 6.1 Fastify v5 Upgrade Target
 
 - **Selected Target:** `fastify ^5.12.5`
-- **Reason:** Current stable Fastify 5 release that addresses all applicable identified Fastify advisories in this planning baseline (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-9q9j-q6p8-xq58, GHSA-hwr6-493r-vm6h, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm, GHSA-4mh8-r7rc-xpvc).
+- **Reason:** Current stable Fastify 5 release that addresses all applicable Fastify advisories identified for the Phase 21 planning baseline (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-9q9j-q6p8-xq58, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm, GHSA-4mh8-r7rc-xpvc).
 
 ### 6.2 Fastify Plugin Targets
 
@@ -372,13 +371,13 @@ Step 18: Produce final Phase 21 execution report.
 | Package changes | **NONE** |
 | Lockfile changes | **NONE** |
 | Database changes | **NONE** |
-| **Implementation Readiness** | **READY FOR AUDIT** |
+| **Implementation Readiness** | **READY FOR IMPLEMENTATION AUTHORIZATION** |
 
 ---
 
 **PHASE 21 PLAN STATUS:**
 
-**READY FOR AUDIT**
+**READY FOR IMPLEMENTATION AUTHORIZATION**
 
 **Implementation:**  
 NOT AUTHORIZED
