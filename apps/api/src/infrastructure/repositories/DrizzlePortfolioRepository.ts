@@ -49,7 +49,7 @@ export class DrizzlePortfolioRepository implements IPortfolioRepository {
       .where(and(...conditions))
       .orderBy(desc(portfolios.createdAt));
 
-    return rows.map((r) => ({
+    return rows.map((r: any) => ({
       id: r.id,
       userId: r.userId,
       name: r.name,
@@ -238,7 +238,7 @@ export class DrizzlePortfolioRepository implements IPortfolioRepository {
       .where(eq(portfolioTransactions.portfolioId, portfolioId))
       .orderBy(desc(portfolioTransactions.transactionDate), desc(portfolioTransactions.createdAt));
 
-    return rows.map((r) => ({
+    return rows.map((r: any) => ({
       id: r.id,
       portfolioId: r.portfolioId,
       instrumentId: r.instrumentId,

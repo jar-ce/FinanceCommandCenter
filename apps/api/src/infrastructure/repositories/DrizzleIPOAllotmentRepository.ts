@@ -90,7 +90,7 @@ export class DrizzleIPOAllotmentRepository implements IIPOAllotmentRepository {
       .limit(limit)
       .offset(offset);
 
-    const allotments: EnrichedIPOAllotmentResult[] = rows.map((r) => ({
+    const allotments: EnrichedIPOAllotmentResult[] = rows.map((r: any) => ({
       id: r.id,
       userId: r.userId,
       applicationId: r.applicationId,

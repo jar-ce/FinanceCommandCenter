@@ -6,6 +6,8 @@ export interface AuthenticatedPrincipal {
   role: 'user' | 'admin' | 'system';
   issuedAt: number;
   expiresAt: number;
+  jti?: string;
+  type?: 'access' | 'refresh';
 }
 
 /**
@@ -15,14 +17,18 @@ export interface AuthenticatedPrincipal {
 export function createSignedPrincipalToken(
   userId: string,
   role: 'user' | 'admin' | 'system' = 'user',
-  ttlMs: number = 86400000 // 24 hours
+  ttlMs: number = 86400000, // 24 hours
+  type: 'access' | 'refresh' = 'access',
+  jti: string = crypto.randomUUID()
 ): string {
   const now = Date.now();
   const payload: AuthenticatedPrincipal = {
     userId,
     role,
     issuedAt: now,
-    expiresAt: now + ttlMs
+    expiresAt: now + ttlMs,
+    jti,
+    type
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const hmac = crypto.createHmac('sha256', env.JWT_SECRET);
@@ -44,7 +50,10 @@ export function signUserId(userId: string, role: string = 'user'): string {
  * Verifies a cryptographically signed principal token.
  * Returns the AuthenticatedPrincipal payload if valid and unexpired; otherwise returns null.
  */
-export function verifySignedPrincipalToken(token: string): AuthenticatedPrincipal | null {
+export function verifySignedPrincipalToken(
+  token: string,
+  expectedType?: 'access' | 'refresh'
+): AuthenticatedPrincipal | null {
   if (!token || typeof token !== 'string') return null;
   const trimmed = token.trim();
   const parts = trimmed.split('.');
@@ -68,6 +77,7 @@ export function verifySignedPrincipalToken(token: string): AuthenticatedPrincipa
 
     if (!payload.userId || !payload.role || !payload.expiresAt) return null;
     if (Date.now() > payload.expiresAt) return null;
+    if (expectedType && payload.type && payload.type !== expectedType) return null;
 
     return payload;
   } catch {

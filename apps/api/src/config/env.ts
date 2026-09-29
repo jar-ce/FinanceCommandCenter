@@ -14,6 +14,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters long').default('dev-jwt-secret-min-16-characters-long'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
+  REDIS_URL: z.string().optional(),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
 });
@@ -37,6 +38,9 @@ export function validateEnvConfig(rawEnv: Record<string, any> = process.env): En
   if (parsed.NODE_ENV === 'production') {
     if (DEFAULT_DEV_SECRETS.includes(parsed.JWT_SECRET)) {
       throw new Error('FATAL: Default development JWT_SECRET is rejected in production. Provide an explicit secret.');
+    }
+    if (!parsed.REDIS_URL || parsed.REDIS_URL.trim() === '') {
+      throw new Error('FATAL: REDIS_URL environment variable is required for shared token revocation storage in production.');
     }
   }
 

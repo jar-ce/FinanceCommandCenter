@@ -86,7 +86,7 @@ export class DrizzleWatchlistRepository implements IWatchlistRepository {
       .where(eq(watchlistItems.watchlistId, id))
       .orderBy(asc(watchlistItems.sortOrder), asc(watchlistItems.createdAt));
 
-    const mappedItems: WatchlistItemRecord[] = itemRows.map(({ item, instrument, quote }) => ({
+    const mappedItems: WatchlistItemRecord[] = itemRows.map(({ item, instrument, quote }: any) => ({
       id: item.id,
       watchlistId: item.watchlistId,
       instrumentId: item.instrumentId,
@@ -231,7 +231,7 @@ export class DrizzleWatchlistRepository implements IWatchlistRepository {
       .orderBy(asc(watchlistItems.sortOrder));
 
     const nextOrder = existingItems.length > 0
-      ? Math.max(...existingItems.map(i => i.sortOrder)) + 1
+      ? Math.max(...existingItems.map((i: any) => i.sortOrder)) + 1
       : 0;
 
     const [inserted] = await db
@@ -277,7 +277,7 @@ export class DrizzleWatchlistRepository implements IWatchlistRepository {
       .where(eq(watchlistItems.watchlistId, watchlistId))
       .orderBy(asc(watchlistItems.sortOrder), asc(watchlistItems.createdAt));
 
-    return itemRows.map(({ item, instrument, quote }) => ({
+    return itemRows.map(({ item, instrument, quote }: any) => ({
       id: item.id,
       watchlistId: item.watchlistId,
       instrumentId: item.instrumentId,

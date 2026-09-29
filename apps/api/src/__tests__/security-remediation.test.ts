@@ -173,7 +173,8 @@ describe('Phase 17 — Security Review & Remediation Suite', () => {
       expect(() => {
         validateEnvConfig({
           NODE_ENV: 'production',
-          JWT_SECRET: 'dev-jwt-secret-min-16-characters-long'
+          JWT_SECRET: 'dev-jwt-secret-min-16-characters-long',
+          REDIS_URL: 'redis://localhost:6379'
         });
       }).toThrow('FATAL: Default development JWT_SECRET is rejected in production');
     });
@@ -181,7 +182,8 @@ describe('Phase 17 — Security Review & Remediation Suite', () => {
     it('accepts explicit secure secret in NODE_ENV=production', () => {
       const validConfig = validateEnvConfig({
         NODE_ENV: 'production',
-        JWT_SECRET: 'super-secure-production-secret-key-998877665544332211'
+        JWT_SECRET: 'super-secure-production-secret-key-998877665544332211',
+        REDIS_URL: 'redis://localhost:6379'
       });
       expect(validConfig.NODE_ENV).toBe('production');
     });

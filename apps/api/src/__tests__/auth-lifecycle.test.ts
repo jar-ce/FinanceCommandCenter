@@ -137,4 +137,29 @@ describe('Phase 20 — Authentication Lifecycle & Token Management Suite', () =>
     expect(adminRes.statusCode).toBe(201);
     expect(JSON.parse(adminRes.body).data.status).toBe('ACTIVE');
   });
+
+  it('6. createRevocationStore enforces production fail-fast when REDIS_URL is absent', () => {
+    import('../domain/services/AuthService.js').then(({ createRevocationStore }) => {
+      expect(() => createRevocationStore('production', '')).toThrow(/Production mode requires a valid REDIS_URL/);
+    });
+  });
+
+  it('7. Shared revocation store contract prevents token usage across multi-instance nodes', async () => {
+    const { AuthService, InMemoryTokenRevocationStore } = await import('../domain/services/AuthService.js');
+    
+    // Shared store instance representing external Redis / key-value store
+    const sharedStore = new InMemoryTokenRevocationStore();
+
+    // Instance A and Instance B share the external store
+    const instanceA = new AuthService(sharedStore);
+    const instanceB = new AuthService(sharedStore);
+
+    const loginResult = await instanceA.login(testUserId, 'user');
+    
+    // Instance A revokes the refresh token
+    await instanceA.revoke(loginResult.refreshToken);
+
+    // Instance B attempts to use the revoked refresh token -> fails
+    await expect(instanceB.refresh(loginResult.refreshToken)).rejects.toThrow('TOKEN_REVOKED');
+  });
 });

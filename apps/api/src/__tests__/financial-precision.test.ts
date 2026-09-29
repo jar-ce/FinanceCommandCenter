@@ -32,12 +32,7 @@ describe('FinancialPrecision & Arithmetic Engine', () => {
     const db = await getDb();
 
     // Query PostgreSQL NUMERIC casting directly to test DB behavior
-    const result = await db.execute<{
-      v1: string;
-      v2: string;
-      v3: string;
-      v_exceed: string;
-    }>(sql`
+    const result: any = await db.execute(sql`
       SELECT 
         CAST('123.4567' AS NUMERIC(18, 4)) as v1,
         CAST('0.0001' AS NUMERIC(18, 4)) as v2,

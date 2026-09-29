@@ -117,7 +117,7 @@ export class DrizzleAlertRepository implements IAlertRepository {
       .where(and(...conditions))
       .orderBy(desc(alertRules.createdAt));
 
-    return rows.map((r) => this.mapRule(r));
+    return rows.map((r: any) => this.mapRule(r));
   }
 
   async getActiveRulesForEvaluation(userId?: string): Promise<AlertRuleRecord[]> {
@@ -133,7 +133,7 @@ export class DrizzleAlertRepository implements IAlertRepository {
       .where(and(...conditions))
       .orderBy(desc(alertRules.createdAt));
 
-    return rows.map((r) => this.mapRule(r));
+    return rows.map((r: any) => this.mapRule(r));
   }
 
   async updateRule(id: string, userId: string, dto: UpdateAlertRuleDTO): Promise<AlertRuleRecord | null> {
@@ -222,7 +222,7 @@ export class DrizzleAlertRepository implements IAlertRepository {
   }): Promise<{ event: AlertEventRecord; notification: NotificationRecord }> {
     const db = await getDb();
 
-    return await db.transaction(async (tx) => {
+    return await db.transaction(async (tx: any) => {
       // 1. Row-level lock on alert_rules for update
       const [ruleRow] = await tx
         .select()
@@ -303,7 +303,7 @@ export class DrizzleAlertRepository implements IAlertRepository {
       .where(and(eq(alertEvents.alertRuleId, ruleId), eq(alertEvents.userId, userId)))
       .orderBy(desc(alertEvents.triggeredAt));
 
-    return rows.map((r) => this.mapEvent(r));
+    return rows.map((r: any) => this.mapEvent(r));
   }
 
   async getNotificationsByUserId(
@@ -334,7 +334,7 @@ export class DrizzleAlertRepository implements IAlertRepository {
       .offset(offset);
 
     return {
-      items: rows.map((r) => this.mapNotification(r)),
+      items: rows.map((r: any) => this.mapNotification(r)),
       total
     };
   }

@@ -70,7 +70,7 @@ export class DrizzleMarketRepository implements IMarketRepository {
       .limit(limit)
       .offset(offset);
 
-    const instruments: MarketInstrumentRecord[] = rows.map((r) => ({
+    const instruments: MarketInstrumentRecord[] = rows.map((r: any) => ({
       id: r.id,
       symbol: r.symbol,
       displayName: r.displayName,

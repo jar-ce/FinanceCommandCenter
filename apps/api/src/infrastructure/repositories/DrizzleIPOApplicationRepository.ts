@@ -90,7 +90,7 @@ export class DrizzleIPOApplicationRepository implements IIPOApplicationRepositor
       .offset(offset)
       .orderBy(sql`${ipoApplications.applicationDate} DESC`, sql`${ipoApplications.createdAt} DESC`);
 
-    const applications: EnrichedIPOApplication[] = rows.map(r => ({
+    const applications: EnrichedIPOApplication[] = rows.map((r: any) => ({
       ...r.app,
       ipoName: r.ipoName || undefined,
       issuerName: r.issuerName || undefined,
