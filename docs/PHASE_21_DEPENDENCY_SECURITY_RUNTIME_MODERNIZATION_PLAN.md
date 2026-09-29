@@ -33,7 +33,7 @@ Phase 21 is a dedicated **Planning & Execution Framework** for Dependency Securi
 - **Production Release Status:** **BLOCKED** by unresolved runtime dependency vulnerabilities
 
 > [!NOTE]  
-> The vulnerability count (12 vulnerabilities: 7 moderate, 4 high, 1 critical) represents the project's observed `npm audit` baseline at planning time. The post-implementation `npm audit` result is authoritative for final release gating.
+> The vulnerability count (12 vulnerabilities: 7 moderate, 4 high, 1 critical) and severity distribution above represent the exact `npm audit` output observed for the repository baseline. Individual upstream advisories may have different GHSA severity classifications; the `npm audit` result remains the authoritative repository release-gate input after implementation.
 
 ---
 
@@ -60,7 +60,7 @@ Node 22 is the selected CI compatibility baseline within the currently supported
 
 | Package | Installed Version | Type | Vulnerability Severity | Affected Range | Minimum Secure Version | Selected Implementation Target |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `fastify` | `4.29.1` | Prod | **HIGH / CRITICAL** | `<=5.12.0` | `5.12.5` | `^5.12.5` |
+| `fastify` | `4.29.1` | Prod | **Mixed (See Advisory Table)** | `<=5.12.0` | `5.12.5` | `^5.12.5` |
 | `fastify-type-provider-zod` | `2.1.0` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `4.0.0` | `^4.0.0` (Fastify 5 + Zod 3 compatible) |
 | `@fastify/cors` | `9.0.1` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `10.0.0` | `^11.3.0` (Fastify 5 compatible) |
 | `@fastify/rate-limit` | `9.1.0` | Prod | **HIGH** (Transitive) | Fastify 4 bound | `10.0.0` | `^11.2.0` (Fastify 5 compatible) |
@@ -75,6 +75,9 @@ Node 22 is the selected CI compatibility baseline within the currently supported
 | `decimal.js` | `10.6.0` | Shared | Clean | N/A | `10.6.0` | Retain `10.6.0` |
 | `pino` | `9.14.0` | Prod | Clean | N/A | `9.14.0` | Retain `9.14.0` |
 | `pino-pretty` | `11.3.0` | Dev | Clean | N/A | `11.3.0` | Retain `11.3.0` |
+
+> [!NOTE]  
+> Fastify 4.29.1 is affected by multiple currently identified advisories with mixed severities. The individual advisory table in Section 5 is authoritative for specific severity levels.
 
 ### 4.2 Web Workspace Dependencies (`apps/web/package.json`)
 
@@ -95,14 +98,16 @@ Node 22 is the selected CI compatibility baseline within the currently supported
 
 | Advisory ID | Subject & Description | Severity | Affected Range | Patched Version | Installed | Exposure Status | Selected Target Resolution |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **GHSA-mrq3-vjjr-p77c** | Fastify `sendWebStream` unbounded-memory-allocation denial of service. | HIGH | `<=5.7.2` | `5.7.3` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-jx2c-rxcm-jvmq** | Fastify `Content-Type` header tab-character body-validation bypass. | HIGH | `<=5.7.1` | `5.7.2` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-444r-cwp2-x5xf** | Fastify `X-Forwarded-Proto` / `X-Forwarded-Host` spoofing when restrictive `trustProxy` configurations are used. | HIGH | `<=5.8.2` | `5.8.3` / `4.29.3` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-w2qp-rph6-63g4** | Fastify vulnerable to schema validation bypass via root primitive coercion mismatch. | HIGH | `<=5.12.0` | `5.12.1` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-9q9j-q6p8-xq58** | Fastify vulnerable to header validation bypass via incomplete schema case normalization (header-schema property names in dependencies, dependentRequired, dependentSchemas, nested subschemas). | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-p68q-wchp-6fh7** | Fastify vulnerable to authentication bypass via malformed URLs reaching encapsulated not-found handlers. | HIGH | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-667r-xxjv-c9mm** | Fastify vulnerable to request body replacement via an async validation result collision (validated request part replaced when async validator result contains an attacker-controlled value property). | MODERATE | `<=5.12.1` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
-| **GHSA-4mh8-r7rc-xpvc** | Fastify denial of service via unhandled exception on HTTP/2 trailer responses (impact requires HTTP/2 enabled and route using `reply.trailer()`). | MODERATE | `<5.12.5` | `5.12.5` | `4.29.1` | **Potential Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-mrq3-vjjr-p77c** | DoS via Unbounded Memory Allocation in `sendWebStream`. | LOW | `<=5.7.2` | `>=5.7.3` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-jx2c-rxcm-jvmq** | `Content-Type` header tab character allows body validation bypass. | HIGH | `<5.7.2` | `>=5.7.2` / `4.29.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-444r-cwp2-x5xf** | `request.protocol` and `request.host` spoofable via `X-Forwarded-Proto`/`Host` from untrusted connections when `trustProxy` uses restrictive trust function. | MODERATE | `<=5.8.2` | `5.8.3` / `4.29.3` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-w2qp-rph6-63g4** | Fastify vulnerable to schema validation bypass via root primitive coercion mismatch. | MODERATE | `<5.12.1` | `5.12.1` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-3m5p-2c4r-xxw2** | Fastify vulnerable to `X-Forwarded-*` spoofing under `trustProxy` hop-count. | MODERATE | `>=5.8.3 <5.12.1` | `5.12.1` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-9q9j-q6p8-xq58** | Fastify vulnerable to request validation bypass via skipped boolean `false` schemas. | HIGH | `<5.12.2` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-hwr6-493r-vm6h** | Fastify vulnerable to authentication bypass via malformed URLs reaching encapsulated not-found handlers. | HIGH | `<5.12.2` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-p68q-wchp-6fh7** | Fastify vulnerable to request body replacement via an async validation result collision. | HIGH | `>=4.0.0 <5.12.2` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-667r-xxjv-c9mm** | Fastify vulnerable to request body replacement via an async validation result collision. | HIGH | `<5.12.2` | `5.12.2` | `4.29.1` | **Confirmed Runtime** | Upgrade to `fastify ^5.12.5`. |
+| **GHSA-4mh8-r7rc-xpvc** | Fastify vulnerable to Denial of Service via unhandled exception on HTTP/2 trailer responses (impact requires HTTP/2 enabled and route using `reply.trailer()`). | MODERATE | `<5.12.5` | `5.12.5` | `4.29.1` | **Potential Runtime** | Upgrade to `fastify ^5.12.5`. |
 | **GHSA-c96f-x56v-gq3h** | `find-my-way` HTTP/2 DDoS vulnerability (transitive via Fastify 4.x). | HIGH | `<=9.6.0` | `9.7.0` | `8.2.2` | **Transitive Runtime** | Resolves via Fastify 5 (`find-my-way ^9.7.0`). |
 | **GHSA-gpj5-g38j-94v9** | Drizzle ORM SQL injection via `sql.identifier` / `.as()`. | HIGH | `<0.45.2` | `0.45.2` | `0.36.4` | **Potential Runtime** (Zero source usage) | Upgrade to `drizzle-orm ^0.45.3`. |
 | **GHSA-82fw-gwwq-j7x9** | `vitest` / `@vitest/mocker` path traversal in mock redirect handler. | MODERATE | `>=2.1.0 <4.1.11` | `4.1.11` | `2.1.9` | **Dev / Test Tooling** | Upgrade to `vitest ^4.1.11`. |
@@ -115,7 +120,7 @@ Node 22 is the selected CI compatibility baseline within the currently supported
 ### 6.1 Fastify v5 Upgrade Target
 
 - **Selected Target:** `fastify ^5.12.5`
-- **Reason:** Current stable Fastify 5 release that addresses all applicable Fastify advisories identified for the Phase 21 planning baseline (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-9q9j-q6p8-xq58, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm, GHSA-4mh8-r7rc-xpvc).
+- **Rationale:** The selected target is the current stable Fastify 5 release in the planning baseline and is at or above the patched versions of the applicable Fastify advisories identified for this project (GHSA-mrq3-vjjr-p77c, GHSA-jx2c-rxcm-jvmq, GHSA-444r-cwp2-x5xf, GHSA-w2qp-rph6-63g4, GHSA-3m5p-2c4r-xxw2, GHSA-9q9j-q6p8-xq58, GHSA-hwr6-493r-vm6h, GHSA-p68q-wchp-6fh7, GHSA-667r-xxjv-c9mm, GHSA-4mh8-r7rc-xpvc).
 
 ### 6.2 Fastify Plugin Targets
 
@@ -176,7 +181,7 @@ graph TD
     Drizzle045["drizzle-orm ^0.45.3"] --> DrizzleCore["drizzle-orm core (Fixes GHSA-gpj5-g38j-94v9)"]
 ```
 
-Expected resolution: The selected direct upgrades are intended to replace affected transitive versions. Final confirmation is determined empirically via `npm ls` and `npm audit` following implementation.
+Expected resolution: The selected direct upgrades are intended to replace affected transitive versions. Final confirmation is determined empirically via `npm ls` and `npm audit` after implementation.
 
 ---
 
@@ -352,7 +357,7 @@ Step 18: Produce final Phase 21 execution report.
 | :--- | :--- |
 | Current audit verified | **PASS** |
 | Current dependency versions verified via `npm view` | **PASS** |
-| Current advisories verified (including GHSA-4mh8-r7rc-xpvc) | **PASS** |
+| Current advisories verified (including GHSA-3m5p-2c4r-xxw2 & GHSA-4mh8-r7rc-xpvc) | **PASS** |
 | Fastify target verified (`^5.12.5`) | **PASS** |
 | Fastify plugin compatibility verified (`@fastify/cors ^11.3.0`, `@fastify/rate-limit ^11.2.0`) | **PASS** |
 | Vitest security target corrected (`^4.1.11` minimum fixed `4.1.11`) | **PASS** |
