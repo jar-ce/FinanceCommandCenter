@@ -18,7 +18,7 @@ export function buildApp(): FastifyInstance {
 
   // Register Infrastructure Plugins
   app.register(cors, {
-    origin: (origin, cb) => {
+    origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
       // In development/test or server-to-server requests without origin header
       if (!origin) return cb(null, true);
       

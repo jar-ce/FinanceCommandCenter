@@ -93,7 +93,7 @@ const reportService = new ReportService(
 export const reportRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.addHook('preHandler', requireAuthentication);
   // Error handling hook for authentication
-  fastify.setErrorHandler((error, _request, reply) => {
+  fastify.setErrorHandler((error: any, _request, reply) => {
 
     if (error.message === 'MISSING_IDENTITY' || error.message === 'INVALID_IDENTITY') {
       return reply.status(401).send({
