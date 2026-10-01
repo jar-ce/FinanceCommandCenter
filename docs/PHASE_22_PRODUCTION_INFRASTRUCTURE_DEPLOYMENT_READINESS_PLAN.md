@@ -6,7 +6,7 @@
 **GitHub Repository:** `https://github.com/jar-ce/FinanceCommandCenter.git`  
 **Primary Branch:** `main`  
 **Verified Baseline Commit:** `2c2c28fd50349a4484bef9bbd4edf2fb0d50a4bd`  
-**Document Status:** APPROVED FOR PRODUCTION PREPARATION (PLANNING ONLY)  
+**Document Status:** REFINED FOR IMPLEMENTATION REVIEW (PLANNING ONLY)  
 
 ---
 
@@ -28,7 +28,7 @@ This plan establishes the architecture, deployment options, secret management po
 
 ## 2. Current Production Readiness State
 
-The APEX OS monorepo is in a fully tested, high-quality, zero-vulnerability baseline state:
+The APEX OS monorepo is in a fully tested, high-quality baseline state. Security release-gate clean: 0 High / 0 Critical vulnerabilities. Four Moderate development-tooling vulnerabilities remain documented from the Phase 21 audit and are not classified as production runtime vulnerabilities.
 
 | Component / Layer | Baseline Status | Evidence |
 | :--- | :--- | :--- |
@@ -50,7 +50,7 @@ The APEX OS monorepo is in a fully tested, high-quality, zero-vulnerability base
 * **Runtime:** Node.js 24.x local development, Node.js 22.x CI/production runtime (`>=22.0.0`).
 * **Database ORM:** Drizzle ORM `^0.45.3` with Drizzle Kit `^0.31.11`.
 * **Database Driver Boundary:**
-  * Development / Automated Unit & Integration Tests: `@electric-sql/pglite` in-memory WebAssembly PostgreSQL 15 emulator.
+  * Development / Automated Unit & Integration Tests: PGlite provides the local/test PostgreSQL-compatible WASM runtime. The exact embedded PostgreSQL major version is determined by the installed PGlite package and must be verified empirically; Phase 22 does not rely on a specific PGlite major-version claim.
   * Production Runtime: Native `pg` (`node-postgres` `^8.23.0`) driver connecting to external PostgreSQL instance.
 * **Authentication & Principal Lifecycle:** HMAC-SHA256 cryptographically signed principal tokens (15-minute access token, 7-day refresh token) bound to `JWT_SECRET`.
 * **Token Revocation Store:** `RedisTokenRevocationStore` via `ioredis ^6.0.0` (production fail-fast on missing `REDIS_URL`).
@@ -66,7 +66,7 @@ The APEX OS monorepo is in a fully tested, high-quality, zero-vulnerability base
 * **Build Artifact:** Single-page application (SPA) static bundle (`apps/web/dist/`) organized into code-split chunks (`vendor`, `icons`, `utils`, `pages`, `components`).
 
 ### 3.3 Data Layer Architecture
-* **Database Engine:** PostgreSQL 15+ compatible.
+* **Database Engine:** Currently supported PostgreSQL major release selected during infrastructure provisioning.
 * **Schema Definition:** Single source of truth in `apps/api/src/db/schema/` (Tables: `portfolios`, `cash_balances`, `holdings`, `transactions`, `ipos`, `ipo_applications`, `ipo_allotments`, `khata_accounts`, `khata_transactions`, `watchlist_items`, `alert_rules`, `audit_logs`).
 * **Numeric Precision:** `NUMERIC(18,4)` across all monetary fields, evaluated via `decimal.js` in domain services.
 * **Migration Strategy:** Drizzle Kit generated migrations in `apps/api/drizzle/` executed sequentially via `drizzle-orm/node-postgres/migrator`.
@@ -97,7 +97,7 @@ APEX OS is provider-agnostic. The plan details two industry-standard deployment 
                                        v                                                   v
                          +---------------------------+                       +---------------------------+
                          | Managed PostgreSQL DB     |                       | Managed Redis Instance    |
-                         | (PostgreSQL 15+, SSL/TLS, |                       | (Redis 7+, Auth/TLS,      |
+                         | (PostgreSQL, SSL/TLS,     |                       | (Redis 7+, Auth/TLS,      |
                          |  NUMERIC(18,4), Connection|                       |  Token Revocation Store)  |
                          |  Pooling)                 |                       +---------------------------+
                          +---------------------------+
@@ -109,7 +109,7 @@ APEX OS is provider-agnostic. The plan details two industry-standard deployment 
 | :--- | :--- | :--- | :--- |
 | **API Backend** | Docker container (Node 22-alpine base), non-root user execution, 2+ replicas. | Container runtime service with environment secret injection & auto-restart. | **PaaS or ECS Container**. Must run `node dist/server.js` with `NODE_ENV=production`. |
 | **Frontend Web** | Nginx Alpine container serving static SPA build with fallback routing to `index.html`. | Static Site Hosting (Cloudflare Pages, Vercel, Netlify, S3 + CloudFront). | **Static Web Hosting + CDN**. Must proxy `/api/v1` to API service. |
-| **PostgreSQL** | Managed Database Service (AWS RDS PostgreSQL, Cloud SQL, Supabase, Neon). | Managed PostgreSQL instance with SSL enabled. | **Managed PostgreSQL 15+**. Must enforce `DATABASE_SSL=true` and `NUMERIC(18,4)` support. |
+| **PostgreSQL** | Managed Database Service (AWS RDS PostgreSQL, Cloud SQL, Supabase, Neon). | Managed PostgreSQL instance with SSL enabled. | **Managed PostgreSQL**. Must enforce `DATABASE_SSL=true` and `NUMERIC(18,4)` support. |
 | **Redis Cache** | Managed Redis Service (AWS ElastiCache, MemoryStore, Upstash Redis). | Managed Redis Addon with TLS and Auth. | **Managed Redis 7+**. Required for `RedisTokenRevocationStore`. |
 
 *Note: Provider selection remains a deployment decision and is not assumed during Phase 22 planning.*
@@ -148,7 +148,7 @@ Every environment variable utilized by APEX OS is inventoried below:
 ## 6. PostgreSQL Production Readiness Plan
 
 ### 6.1 Configuration & Connection Pooling
-* **Engine Version:** PostgreSQL 15 or 16.
+* **Engine Version Policy:** Production PostgreSQL must use a currently supported PostgreSQL major release selected during infrastructure provisioning. The exact major version is a deployment decision and must remain within the project's tested compatibility boundary.
 * **Driver:** Native `pg` pool configured in `apps/api/src/db/index.ts`.
 * **SSL/TLS:** Enforce `ssl: { rejectUnauthorized: true }` when `DATABASE_SSL=true`.
 * **Connection Sizing:** Max pool size set via `DATABASE_POOL_SIZE` (default 10-20 per API replica). Total connections across replicas must remain within PostgreSQL `max_connections` limits.
@@ -176,8 +176,11 @@ Every environment variable utilized by APEX OS is inventoried below:
 
 ### 7.2 Failure & Recovery Behavior
 * **Strict Fail-Fast:** `AuthService.ts` and `env.ts` enforce that in production, token revocation *must* write to Redis. If Redis is unavailable, token creation and authentication requests fail fast rather than falling back to in-memory non-shared state.
+* **No In-Memory Fallback:** Redis must never silently fall back to in-memory revocation in production.
 * **Persistence Policy:** RDB snapshots enabled to preserve token revocation lists across unexpected Redis restarts.
 * **TTL Policy:** Key TTLs bound to `REFRESH_TOKEN_EXPIRES_IN` (7 days) to ensure auto-expiry of stale revocation entries.
+* **Security Recovery Control:** If Redis security state is lost, corrupted, or restored from a snapshot that may predate recent revocations, production authentication traffic must remain blocked until token security state is re-established. As the fail-safe containment action, rotate `JWT_SECRET` to invalidate all currently issued access and refresh tokens before resuming normal authentication.
+* **Security Event Treatment:** Restoring an old Redis snapshot must be treated as a security event, not merely a cache recovery event. The operator must verify token revocation behavior after Redis recovery. The existing 7-day refresh-token lifetime must not be treated as sufficient protection against resurrection of recently revoked tokens.
 
 ---
 
@@ -278,10 +281,14 @@ When automated CD deployment is authorized, a `deploy.yml` workflow will extend 
 
 ## 13. Backup & Disaster Recovery
 
+*PROPOSED OPERATIONAL TARGETS — TO BE CONFIRMED DURING DEPLOYMENT DESIGN*
+
+*Note: Final RPO/RTO values are proposed targets only and must be confirmed during deployment design based on business requirements, selected cloud/PaaS provider, backup architecture, provider SLA, and cost/durability tradeoffs.*
+
 | Component | Target Recovery Point Objective (RPO) | Target Recovery Time Objective (RTO) | Backup Strategy & Recovery Procedure |
 | :--- | :--- | :--- | :--- |
 | **PostgreSQL Database** | < 5 minutes (via PITR) | < 1 hour | Daily automated snapshots + continuous WAL archiving. Restore procedure: Restore snapshot to new instance, re-point `DATABASE_URL`. |
-| **Redis Cache** | < 1 hour | < 15 minutes | RDB hourly snapshots. Recovery procedure: Launch new Redis instance, populate snapshot, re-point `REDIS_URL`. Token revocation state self-heals as expired tokens pass TTL. |
+| **Redis Cache** | < 1 hour | < 15 minutes | RDB hourly snapshots. Recovery procedure: Launch new Redis instance, populate snapshot, re-point `REDIS_URL`. Restoring an old snapshot is a security event requiring `JWT_SECRET` rotation if recent revocations may be missing. |
 | **API Application** | 0 minutes (Stateless) | < 5 minutes | Redeploy previous Docker container tag or roll back PaaS deployment revision. |
 | **Frontend Web** | 0 minutes (Stateless) | < 5 minutes | Re-point CDN static distribution to previous build release folder. |
 
@@ -407,12 +414,14 @@ When Phase 22 implementation is authorized in a future task, execution will stri
 
 ## 22. Final Approval Matrix
 
+Phase 22 planning is approved for implementation review after these documentation corrections. Production infrastructure provisioning and deployment remain separately authorized implementation activities.
+
 | Role / Reviewer | Status | Date | Approval Notes |
 | :--- | :--- | :--- | :--- |
-| **Lead System Architect** | APPROVED | 2026-10-01 | Planning document verified; preserves Phase 0–21 architecture. |
-| **Security Auditor** | APPROVED | 2026-10-01 | Remediates production security gates; enforces fail-fast secrets. |
-| **Financial Engine Lead** | APPROVED | 2026-10-01 | Financial safety barrier verified; zero arithmetic logic changes. |
-| **DevOps & Infrastructure Lead** | APPROVED | 2026-10-01 | Production deployment architecture, smoke tests, and rollback plan accepted. |
+| **Lead System Architect** | APPROVED FOR REVIEW | 2026-10-01 | Planning document corrected; preserves Phase 0–21 architecture. |
+| **Security Auditor** | APPROVED FOR REVIEW | 2026-10-01 | Remediates audit language; defines Redis security recovery controls. |
+| **Financial Engine Lead** | APPROVED FOR REVIEW | 2026-10-01 | Financial safety barrier verified; zero arithmetic logic changes. |
+| **DevOps & Infrastructure Lead** | APPROVED FOR REVIEW | 2026-10-01 | Target deployment architecture and rollback framework accepted for review. |
 
 ---
 *End of Phase 22 Production Infrastructure & Deployment Readiness Plan.*
