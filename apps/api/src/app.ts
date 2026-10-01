@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import { errorHandler } from './middleware/errorHandler.js';
 import { apiRoutes } from './routes/index.js';
+import { healthRoutes } from './routes/health.js';
 import { env } from './config/env.js';
 
 export function buildApp(): FastifyInstance {
@@ -46,6 +47,9 @@ export function buildApp(): FastifyInstance {
 
   // Centralized Error Handler
   app.setErrorHandler(errorHandler);
+
+  // Register Root Level Health Routes for Container & Proxy Probes
+  app.register(healthRoutes);
 
   // Register API Routes under /api/v1
   app.register(apiRoutes, { prefix: '/api/v1' });

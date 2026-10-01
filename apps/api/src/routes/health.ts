@@ -17,8 +17,7 @@ export const healthRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
     return reply.status(200).send(response);
   });
 
-  // GET /ready - Readiness Probe (verifies PostgreSQL database connection)
-  fastify.get('/ready', async (_req, reply) => {
+  const readinessHandler = async (_req: any, reply: any) => {
     try {
       const db = await getDb();
       await db.execute(sql`SELECT 1`);
@@ -43,5 +42,9 @@ export const healthRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
         timestamp: new Date().toISOString()
       });
     }
-  });
+  };
+
+  // GET /ready & GET /health/readiness - Readiness Probe (verifies DB connection)
+  fastify.get('/ready', readinessHandler);
+  fastify.get('/health/readiness', readinessHandler);
 };
