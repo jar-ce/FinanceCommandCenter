@@ -6,7 +6,7 @@
 **GitHub Repository:** `https://github.com/jar-ce/FinanceCommandCenter.git`  
 **Primary Branch:** `main`  
 **Verified Phase 22 Baseline Commit:** `78c29c7035e8b1645279207fd80a333cf1292aba`  
-**Document Status:** APPROVED FOR PRODUCTION ROADMAP (PLANNING ONLY)  
+**Document Status:** REFINED FOR IMPLEMENTATION REVIEW (PLANNING ONLY)  
 
 ---
 
@@ -53,7 +53,7 @@ Before APEX OS can accept live user traffic, the following 5 operational gaps mu
 [ Phase 22 Repository Ready ]
           |
           +--> GAP 1: Provider Selection & Decision (AWS vs GCP vs PaaS)
-          +--> GAP 2: Infrastructure Provisioning (VPC, RDS, ElastiCache, ECS/Cloud Run)
+          +--> GAP 2: Infrastructure Provisioning (VPC, DB, Redis, Container Host)
           +--> GAP 3: Production Secret Injection (Secrets Manager -> Runtime ENV)
           +--> GAP 4: Pre-Deploy Migration & Live Application Deployment
           +--> GAP 5: Live Endpoint Smoke Testing & DNS Cutover
@@ -76,13 +76,15 @@ Three industry-standard deployment options were evaluated against APEX OS archit
 | Evaluation Criterion | Option A: AWS Cloud Native (ECS Fargate + RDS PostgreSQL + ElastiCache) | Option B: GCP Cloud Native (Cloud Run + Cloud SQL + Memorystore) | Option C: Managed PaaS (Render / Railway / Fly.io) |
 | :--- | :--- | :--- | :--- |
 | **Operational Complexity** | Medium-High (AWS IAM, VPC, ECS tasks, ALB setup). | Medium (GCP IAM, VPC Serverless Connector, Cloud Run). | **Low** (Automated git push / container deploy, minimal infra management). |
-| **PostgreSQL Support** | AWS RDS PostgreSQL 15+ (Multi-AZ, SSL, WAL PITR). | GCP Cloud SQL PostgreSQL 15+ (SSL, PITR). | Managed PostgreSQL add-on (SSL, daily snapshots). |
+| **PostgreSQL Support** | AWS RDS PostgreSQL (Multi-AZ, SSL, WAL PITR). | GCP Cloud SQL PostgreSQL (SSL, PITR). | Managed PostgreSQL add-on (SSL, daily snapshots). |
 | **Redis Support** | ElastiCache Redis 7+ (TLS, HA failover). | Memorystore Redis 7+ (TLS, HA). | Managed Redis add-on (TLS, Auth token). |
 | **Container Execution** | AWS ECS Fargate (Node 22, non-root, auto-restart). | GCP Cloud Run (Node 22, stateless, auto-scale). | Web Service container runtime (Node 22, auto-restart). |
 | **Frontend Web CDN** | S3 Bucket + AWS CloudFront (Edge SSL, rewrite rules). | Cloud Storage + Cloud CDN (Edge SSL). | Static Site / CDN hosting (Render Static / Cloudflare). |
 | **Secret Management** | AWS Secrets Manager / Parameter Store. | GCP Secret Manager. | PaaS Environment Secret Vault. |
 | **Security Isolation** | VPC Private Subnets, Security Groups. | VPC Private IP, Authorized Networks. | Private Network Peering / Internal URL routing. |
 | **Cost Profile** | ~$80 - $200/mo baseline (RDS + ElastiCache + ECS). | ~$60 - $150/mo baseline (Cloud SQL + Run). | ~$25 - $70/mo baseline (Starter Managed DB + Redis). |
+
+*Disclaimer: These figures are illustrative planning estimates only. Actual cost depends on provider, region, compute/database sizing, storage, backups, networking, traffic, availability configuration, and applicable free tiers or committed-use pricing. Final pricing must be verified against the selected provider before provisioning.*
 
 ### 4.2 Decision Framework & Status
 * **Architectural Suitability:** All three options satisfy APEX OS requirements for Fastify containerization, native PostgreSQL `pg` SSL connectivity, and `RedisTokenRevocationStore`.
@@ -152,7 +154,7 @@ The proposed live target architecture provides strict network isolation, encrypt
 ## 7. PostgreSQL Provisioning Plan
 
 ### 7.1 Instance Specifications & Security Policy
-* **Engine Release:** Currently supported PostgreSQL major release (PostgreSQL 15+).
+* **Engine Release:** A currently supported PostgreSQL major release selected during infrastructure provisioning and verified against the application's tested compatibility boundary.
 * **Storage & Encryption:** Storage auto-scaling with AES-256 encryption-at-rest for database volumes and automated snapshots.
 * **Network Encrypted Transit:** Enforce `DATABASE_SSL=true` requiring TLS 1.2+ encrypted client connections.
 * **Session Configuration:**
@@ -262,28 +264,28 @@ No production credentials may exist in source control, environment templates, or
 
 ## 13. Database Migration Release Process
 
-Production migration execution must adhere to this 6-step pre-deployment pipeline:
+Production migration execution must adhere to this 6-step pre-deployment pipeline using the exact immutable API container image:
 
 ```
-[ Step 1: Automated Database Snapshot Checkpoint ]
+[ Step 1: Build API Container Image & Tag with Immutable Git Commit SHA (`sha-${GITHUB_SHA}`) ]
                        |
                        v
-[ Step 2: Isolated Migration Container Spawned ]
+[ Step 2: Push Immutable Container Image to Container Registry ]
                        |
                        v
-[ Step 3: Run `npm run db:migrate --workspace=@finance-command-center/api` ]
+[ Step 3: Spawn Ephemeral Migration Task Using That Exact Container Image SHA ]
+                       | (Executes `npm run db:migrate --workspace=@finance-command-center/api`)
+                       v
+[ Step 4: Verify Migration Task Log Success ]
                        |
                        v
-[ Step 4: Verify Migration Log Success ]
+[ Step 5: Rolling Deploy of API Container Replicas Using The Same Image SHA ]
                        |
                        v
-[ Step 5: Rolling Release of API Container Replicas ]
-                       |
-                       v
-[ Step 6: Post-Deployment Readiness Smoke Test ]
+[ Step 6: Post-Deployment Health Probe & Live Smoke Verification ]
 ```
 
-* **Rollback Principle:** Application code rollbacks do NOT trigger automatic database rollbacks. Future migrations must be additive to permit safe application container rollback without breaking schema state.
+* **Rollback & Downtime Policy:** Application code rollbacks do NOT trigger automatic database rollbacks. Future migrations must be additive to permit safe application container rollback without breaking schema state. Zero-downtime deployment behavior is not claimed unless supported by the selected cloud provider and container orchestrator deployment configuration.
 
 ---
 
@@ -293,9 +295,9 @@ Extends existing `.github/workflows/deploy.yml` CD pipeline:
 
 1. **Trigger:** Manual Dispatch (`workflow_dispatch`) with explicit target environment selection (`production`).
 2. **Mandatory CI Gate:** All 4 validation gates must pass cleanly (`type-check`, `test`, `build`, `npm audit --audit-level=high`).
-3. **Pre-Deploy Task:** Spawns ephemeral migration task against production PostgreSQL.
-4. **Image Tagging:** Container images built and tagged with commit SHA (`sha-78c29c7`).
-5. **Deployment Rollout:** Rolling update replaces API container instances.
+3. **Immutable Image Build & Push:** Build API Docker image and push to container registry tagged with commit SHA (`sha-${GITHUB_SHA}`).
+4. **Pre-Deploy Migration Task:** Spawns ephemeral container task using that exact image SHA against production PostgreSQL.
+5. **Deployment Rollout:** Rolling update deploys the same container image SHA to API service replicas.
 6. **Readiness Probe Ping:** Executes automated `curl` probe against `GET /health/readiness`. If probe fails, pipeline halts and initiates automated rollback.
 
 ---
@@ -310,7 +312,7 @@ Following deployment and prior to public DNS cutover, the operational team must 
 | **SMOKE-02** | `GET /health/readiness` | Unauthenticated | `200 OK` (`database: "connected"`) | Verifies DB & Redis live connectivity. |
 | **SMOKE-03** | `GET /api/v1/dashboard/summary` | Unauthenticated (No Header) | `401 Unauthorized` | Verifies authentication gate. |
 | **SMOKE-04** | Security Headers Inspection | Any HTTP GET | `nosniff`, `DENY`, CSP present | Verifies SEC-02 header enforcement. |
-| **SMOKE-05** | CORS Enforcement Check | `Origin: https://malicious.com` | `500` / `CORS_NOT_ALLOWED` | Verifies SEC-06 CORS origin restriction. |
+| **SMOKE-05** | CORS Enforcement Check | Unauthorized Origin (e.g. `Origin: https://unauthorized-domain.com`) | Request rejected; no `Access-Control-Allow-Origin` header granted. | Verifies unauthorized origin is rejected and `Access-Control-Allow-Origin` is not granted. Exact HTTP status code must be verified against deployed API behavior; legitimate `CORS_ORIGIN` remains allowed. |
 | **SMOKE-06** | Auth Flow & Token Revocation | `POST /api/v1/auth/login` | Token issued, logout revokes | Verifies Redis revocation store. |
 | **SMOKE-07** | Frontend App Load | `https://app.example.com` | `200 OK` (SPA renders) | Verifies CDN & SPA fallback routing. |
 
@@ -458,26 +460,28 @@ Live deployment execution requires explicit, sequential sign-off across 7 distin
 
 ## 25. Implementation Sequence (Future Execution Roadmap)
 
-When live implementation is authorized in a future task, execution will strictly follow this 18-step sequence:
+When live implementation is authorized in a future task, execution will strictly follow this 20-step sequence:
 
 1. Finalize Cloud Provider Decision (AWS / GCP / PaaS).
 2. Provision VPC Network, Private Subnets, and Security Groups.
-3. Provision Managed PostgreSQL Instance (PostgreSQL 15+, SSL enabled).
+3. Provision Managed PostgreSQL Instance (A currently supported PostgreSQL major release).
 4. Provision Managed Redis Cluster (Redis 7+, TLS enabled).
 5. Configure Secret Manager Vault (`DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`).
 6. Configure DNS Hostnames & Issue TLS Certificates.
 7. Configure Container Registry (ECR / Artifact Registry / Docker Hub).
-8. Execute Pre-Deploy Database Migration Task (`npm run db:migrate`).
-9. Build & Push API Container Image (`sha-${GITHUB_SHA}`).
-10. Deploy API Container Service Replicas.
-11. Build & Push Static Web SPA Assets to CDN.
-12. Verify Health & Readiness Probes (`GET /health/readiness`).
-13. Execute Live HTTP Smoke Test Sequence (Section 15).
-14. Verify Pino Log Ingestion & Telemetry Alert Routing.
-15. Perform Automated Database Snapshot & WAL Restore Test.
-16. Perform Container Rollback Verification Test.
-17. Activate Public DNS Traffic Cutover (`app.example.com`).
-18. Deliver Production Operational Handoff Report.
+8. Build API Container Image.
+9. Tag and Push API Container Image using Immutable Commit SHA (`sha-${GITHUB_SHA}`).
+10. Execute Pre-Deployment Database Migration Task using That Exact Image SHA (`npm run db:migrate`).
+11. Deploy API Container Service Replicas using the Same Image SHA.
+12. Build and Publish Frontend Static SPA Assets to CDN.
+13. Verify API Liveness Probe (`GET /health`).
+14. Verify API Readiness Probe (`GET /health/readiness`).
+15. Execute Live HTTP Smoke Test Sequence (Section 15).
+16. Verify Pino Log Ingestion & Telemetry Alert Routing.
+17. Perform Automated Database Snapshot & PITR Restore Validation.
+18. Perform Controlled Container Rollback Validation.
+19. Activate Public DNS Traffic Cutover (`app.example.com`).
+20. Deliver Production Operational Handoff Report.
 
 ---
 
@@ -499,7 +503,7 @@ When live implementation is authorized in a future task, execution will strictly
 | **Lead System Architect** | APPROVED FOR ROADMAP | 2026-10-01 | Planning document verified; provider-neutral architecture accepted. |
 | **Security Auditor** | APPROVED FOR ROADMAP | 2026-10-01 | Secret fail-fast and Redis stale snapshot recovery protocol approved. |
 | **Financial Engine Lead** | APPROVED FOR ROADMAP | 2026-10-01 | Financial safety barrier verified; zero arithmetic logic changes. |
-| **DevOps & Infrastructure Lead** | APPROVED FOR ROADMAP | 2026-10-01 | Target architecture, smoke test sequence, and 7-checkpoint authorization model approved. |
+| **DevOps & Infrastructure Lead** | APPROVED FOR ROADMAP | 2026-10-01 | Immutable deployment sequence, smoke contracts, and rollback model approved. |
 
 ---
 *End of Phase 23 Production Provider Selection, Infrastructure Provisioning & Live Deployment Plan.*
